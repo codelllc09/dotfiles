@@ -3,6 +3,29 @@
 單一真相倉庫 + symlink 農場。佈局相容 GNU Stow（`sudo dnf install stow`
 後可用 `stow wezterm` 取代 install.sh）。
 
+## 已驗證環境快照（2026-09-04）
+
+本倉庫配置與下列版本深度耦合（尤其 wezterm nightly 和 rime 自癒邏輯），
+跨發行版/跨大版本**不保證可用**，系統大版本升級後請按下方清單驗收：
+
+| 組件 | 版本 |
+|---|---|
+| 發行版 | Fedora 44 (Forty Four)，內核 6.19.6-300.fc44 |
+| 桌面 | GNOME Shell 50.4 · Wayland（mutter） |
+| 終端 | wezterm **20260901 nightly**（非 distro 稳定版，坑位记录见 herd.lua 档头） |
+| 輸入法 | ibus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
+| 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底 |
+
+### 升級後檢查清單
+
+1. `wezterm show-keys | grep Split` 有輸出 → 配置載入正常（含 require herd）
+2. `tail /tmp/herd-debug.log` 有新 `armed` → 監視鏈存活
+3. 中英切換時游標色跟隨 → rime 自癒（ime_heal）還適用；
+   **注意**：ime_heal 的實測環境寫在 wezterm.lua 該段註解裏
+   （gnome-shell/mutter/ibus 版本敏感），升級後若行爲異常先看那裏
+4. Fedora 大版本升級後：ibus-rime 的 userdb 建議先 `rime_deployer --sync`
+   再動配置，避免詞庫損傷
+
 ## 佈局
 
 每個工具一個「包」目錄，內部結構 = 家目錄相對路徑：
