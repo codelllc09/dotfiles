@@ -80,6 +80,14 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, conf, hover, max_width
   -- herd 状态点：agent pane 才有；任何失败静默回退为无点，不影响原渲染
   local herd_dot = {}
   if herd then pcall(function() herd_dot = herd.dot_for(tab.active_pane.pane_id) end) end
+  -- 佈局碼（v2.2）：N≥2 才顯示，暗灰；單格不顯示
+  local herd_code = ''
+  if herd then
+    pcall(function()
+      local c = herd.layout_code(tab)
+      if c and c ~= '' and c ~= '1' then herd_code = c end
+    end)
+  end
   if tab.is_active then
     local els = {
       { Background = { Color = '#313244' } },  -- 焦点 tab 药丸底色
@@ -87,6 +95,10 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, conf, hover, max_width
       { Text = ' [' .. rime_badge() .. '] ' },
     }
     for _, e in ipairs(herd_dot) do els[#els + 1] = e end
+    if herd_code ~= '' then
+      els[#els + 1] = { Foreground = { Color = '#585b70' } } -- 佈局碼暗灰
+      els[#els + 1] = { Text = herd_code .. ' ' }
+    end
     els[#els + 1] = { Foreground = { Color = '#cdd6f4' } } -- 标题亮色（状态点后重设，防染色）
     els[#els + 1] = { Text = title .. ' ' }
     return wezterm.format(els)
@@ -96,6 +108,10 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, conf, hover, max_width
       { Text = ' [·] ' },
     }
     for _, e in ipairs(herd_dot) do els[#els + 1] = e end
+    if herd_code ~= '' then
+      els[#els + 1] = { Foreground = { Color = '#585b70' } } -- 佈局碼暗灰
+      els[#els + 1] = { Text = herd_code .. ' ' }
+    end
     els[#els + 1] = { Foreground = { Color = '#6c7086' } } -- 恢复灰阶（防状态点染色标题）
     els[#els + 1] = { Text = title .. ' ' }
     return wezterm.format(els)

@@ -457,6 +457,82 @@ function M.state()
   return STATE
 end
 
+-- ═══ v2.2 佈局碼（TLC）：geometry → 唯一碼 ═══
+-- 三法則：①優先級 V>H（僅影響文本：H 之子免括號，V 之內嵌 H 需括號）
+--        ②同向鏈 n 元合併；全單葉且 n≥3 糖寫 nH/nV（n=2 保持 1H1，與原表 N=2 行一致）
+--        ③典範化：每節點先取 H 方向全部乾淨切線，無則取 V——算法即典範化
+-- 幾何 → 碼：x 區間的重疊連通分量 = 可被豎切線分離的組（觸邊不算重疊 = 乾淨切線）
+-- 單位注記：left_col/top_row 與 width/height 若單位不一致（格 vs 像素），
+-- 分組比較將失真——首輪 dbg dump 會暴露實際值，必要時再修。
+
+local function strip_groups(panes, is_h)
+  local keyed = {}
+  for _, p in ipairs(panes) do
+    local lo = is_h and p.left_col or p.top_row
+    local hi = is_h and (p.left_col + p.width) or (p.top_row + p.height)
+    keyed[#keyed + 1] = { lo = lo, hi = hi, p = p }
+  end
+  table.sort(keyed, function(a, b) return a.lo < b.lo end)
+  local groups, cur, cur_hi = {}, nil, 0
+  for _, e in ipairs(keyed) do
+    if cur and e.lo < cur_hi then -- 區間重疊 → 同組
+      cur[#cur + 1] = e.p
+      if e.hi > cur_hi then cur_hi = e.hi end
+    else
+      cur = { e.p }
+      cur_hi = e.hi
+      groups[#groups + 1] = cur
+    end
+  end
+  return groups
+end
+
+local function enc_layout(panes, axis) -- 返回 code, used_axis
+  if #panes == 1 then return '1', nil end
+  local groups = strip_groups(panes, axis == 'H')
+  if #groups == 1 then
+    axis = (axis == 'H') and 'V' or 'H'
+    groups = strip_groups(panes, axis == 'H')
+    if #groups == 1 then
+      return tostring(#panes) .. '?', axis -- 非 guillotine 兜底（wezterm 理論上不會產生）
+    end
+  end
+  local child_axis = (axis == 'H') and 'V' or 'H'
+  local parts, all_single = {}, true
+  for i, g in ipairs(groups) do
+    local s, child_used = enc_layout(g, child_axis)
+    if axis == 'V' and child_used == 'H' then
+      s = '(' .. s .. ')'
+    end
+    if s ~= '1' then all_single = false end
+    parts[i] = s
+  end
+  if all_single and #groups >= 3 then
+    return tostring(#groups) .. axis, axis
+  end
+  return table.concat(parts, axis), axis
+end
+
+local layout_dumped = {}
+function M.layout_code(tab)
+  local panes = tab and tab.panes
+  if type(panes) ~= 'table' or #panes == 0 then return '' end
+  local ok, code = pcall(function() return (enc_layout(panes, 'H')) end)
+  if not ok or type(code) ~= 'string' then return '' end
+  -- 驗證協議：每 (tab, 窗格数) 组合首次渲染时落一份幾何+碼的證據
+  local key = tostring(tab.tab_id) .. '#' .. #panes
+  if not layout_dumped[key] then
+    layout_dumped[key] = true
+    local bits = {}
+    for _, p in ipairs(panes) do
+      bits[#bits + 1] = string.format('%d:[%d,%d %dx%d]',
+        p.pane_id or -1, p.left_col or -1, p.top_row or -1, p.width or -1, p.height or -1)
+    end
+    dbg('layout tab' .. key .. ' {' .. table.concat(bits, ' ') .. '} => ' .. code)
+  end
+  return code
+end
+
 function M.setup()
   load_global()
   my_token = tostring(os.time()) .. ':' .. tostring(math.random())
