@@ -415,7 +415,8 @@ end
 
 -- ═══ 对外接口 ═══
 
--- tab 状态点（旧接口：单 pane）——保留作兼容
+-- tab 状态点：非 agent pane 返回空表（调用方 ipairs 直接吃掉）
+-- 同时兼作启动器：config 重载必触发 tab 重绘 → dot_for → arm
 function M.dot_for(pane_id)
   if not armed then arm() end
   local r = STATE[tonumber(pane_id)]
@@ -426,46 +427,10 @@ function M.dot_for(pane_id)
   }
 end
 
--- tab 状态点（新接口：一 tab 多分屏，每个 agent pane 一枚点）
--- panes = format-tab-title 回调的第三参数（PaneInformation 列表）
--- 设计：按 pane_id 稳定排序（避免状态变化时点位跳动）；
--- blocked 用 ▲（形状+颜色双编码，位置在中段也一眼可辨）；超 4 枚折叠 +N
-local last_dots_key = nil
-function M.dots_for(panes)
-  if not armed then arm() end -- 渲染路径兼作启动器
-  if type(panes) ~= 'table' then return {} end
-  local recs = {}
-  for _, p in ipairs(panes) do
-    local pid = tonumber(p and p.pane_id)
-    local r = pid and STATE[pid]
-    if r then recs[#recs + 1] = { pid = pid, r = r } end
-  end
-  if #recs == 0 then return {} end
-  table.sort(recs, function(a, b) return a.pid < b.pid end)
-  local key = table.concat((function()
-    local t = {} for _, e in ipairs(recs) do t[#t + 1] = e.pid .. e.r.state end return t
-  end)(), ',')
-  if key ~= last_dots_key then
-    last_dots_key = key
-    dbg('dots_for: ' .. key)
-  end
-  local els = {}
-  for i = 1, math.min(#recs, 4) do
-    local r = recs[i].r
-    els[#els + 1] = { Foreground = { Color = STATE_COLOR[r.state] or '#6c7086' } }
-    els[#els + 1] = { Text = r.state == 'blocked' and '▲' or '●' }
-  end
-  if #recs > 4 then
-    els[#els + 1] = { Foreground = { Color = '#6c7086' } }
-    els[#els + 1] = { Text = '+' .. (#recs - 4) }
-  end
-  els[#els + 1] = { Text = ' ' }
-  return els
-end
-
 function M.state()
   return STATE
 end
+
 function M.setup()
   load_global()
   my_token = tostring(os.time()) .. ':' .. tostring(math.random())
