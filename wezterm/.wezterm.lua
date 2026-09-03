@@ -84,7 +84,7 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, conf, hover, max_width
   local herd_code = ''
   if herd then
     pcall(function()
-      local c = herd.layout_code(tab, panes)
+      local c = herd.layout_glyph(tab, panes)
       if c and c ~= '' and c ~= '1' then herd_code = c end
     end)
   end

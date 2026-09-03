@@ -565,6 +565,27 @@ function M.layout_code(tab, panes3)
   return code
 end
 
+-- ═══ 渲染層（可插拔）：典範碼 → 象形字；未命中 → 原碼 ═══
+-- 口家族：吅=左右二分  吕=上下二分  品=上1下2  田=四宫格
+-- 笔画家族：川=三竖  三=三横  亖=四横
+-- 弃用记录：朋（月内横笔被读作左三右三=2×3）、卌（中横切四竖=梯状八格）、
+-- 4H 无干净四竖字 → 回退码文本。换皮只需改这张表。
+local LAYOUT_GLYPH = {
+  ['1H1'] = '吅',
+  ['1V1'] = '吕',
+  ['3H'] = '川',
+  ['3V'] = '三',
+  ['1V1H1V1'] = '田',
+  ['4V'] = '亖',
+  ['1V(1H1)'] = '品',
+}
+
+function M.layout_glyph(tab, panes3)
+  local code = M.layout_code(tab, panes3)
+  if code == '' or code == '1' then return '' end
+  return LAYOUT_GLYPH[code] or code
+end
+
 function M.setup()
   load_global()
   my_token = tostring(os.time()) .. ':' .. tostring(math.random())
