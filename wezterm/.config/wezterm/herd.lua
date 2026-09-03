@@ -18,6 +18,11 @@
 --
 -- 输出：~/.local/state/wezterm-herd/{current.json,transitions.jsonl}
 -- 诊断：/tmp/herd-debug.log（低频：setup/armed/chain die/mkdir）
+--
+-- Windows 适配暂时搁置：本模块假设 Linux（notify-send、~/.local/state、
+-- /dev/pts 等），在 Windows 上经 pcall 静默降级——tab 灯可能部分工作，
+-- 通知/落盘无。真要在 Windows 部署时再做：通知改 powershell toast 或
+-- wezterm 内建、状态目录改 wezterm.home_dir、检测层基本可直接复用。
 -- ═══════════════════════════════════════════════════════════════
 local wezterm = require 'wezterm'
 local M = {}
