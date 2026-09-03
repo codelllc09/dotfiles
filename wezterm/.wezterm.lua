@@ -77,9 +77,13 @@ end
 
 wezterm.on('format-tab-title', function(tab, tabs, panes, conf, hover, max_width)
   local title = tab.active_pane.title or ''
-  -- herd 状态点：agent pane 才有；任何失败静默回退为无点，不影响原渲染
-  local herd_dot = {}
-  if herd then pcall(function() herd_dot = herd.dot_for(tab.active_pane.pane_id) end) end
+  -- herd 指示燈（方案A tab 級聚合）與未讀徽章（QQ 式）：各自獨立渲染；
+  -- 任何失败静默回退为空，不影响原渲染
+  local herd_dot, herd_unread = {}, {}
+  if herd then
+    pcall(function() herd_dot = herd.tab_dot(tab) end)
+    pcall(function() herd_unread = herd.tab_unread(tab) end)
+  end
   -- 佈局碼（v2.2）：N≥2 才顯示，暗灰；單格不顯示
   local herd_code = ''
   if herd then
@@ -95,6 +99,7 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, conf, hover, max_width
       { Text = ' [' .. rime_badge() .. '] ' },
     }
     for _, e in ipairs(herd_dot) do els[#els + 1] = e end
+    for _, e in ipairs(herd_unread) do els[#els + 1] = e end
     els[#els + 1] = { Foreground = { Color = '#cdd6f4' } } -- 标题亮色（状态点后重设，防染色）
     els[#els + 1] = { Text = title .. ' ' }
     -- 佈局碼：藥丸外的額外部分（退出藥丸底色後再渲染）
@@ -110,6 +115,7 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, conf, hover, max_width
       { Text = ' [·] ' },
     }
     for _, e in ipairs(herd_dot) do els[#els + 1] = e end
+    for _, e in ipairs(herd_unread) do els[#els + 1] = e end
     els[#els + 1] = { Foreground = { Color = '#6c7086' } } -- 恢复灰阶（防状态点染色标题）
     els[#els + 1] = { Text = title .. ' ' }
     -- 佈局碼：藥丸外的額外部分

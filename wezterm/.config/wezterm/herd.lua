@@ -3,7 +3,7 @@
 -- ───────────────────────────────────────────────────────────────
 -- 思路移植自 herdr.dev 的 screen-manifest 路线（Apache-2.0）：
 --   识别前景进程 → 刮取 pane 底部 → 规则表判 working/idle/blocked
---   → tab 状态点 + 右状态栏 + JSONL 状态流水落盘
+--   → tab 状态点+未读徽章 + JSONL 状态流水落盘
 --
 -- 本 nightly 实测出的三个坑（代码里皆有对应处理）：
 --   1. wezterm.GLOBAL 不是纯 Lua table：跨 eval 存取 table 会拿到
@@ -27,7 +27,9 @@
 local wezterm = require 'wezterm'
 local M = {}
 
--- 运行期状态：[pane_id(number)] = {agent,state,since,rule,ctx,cost,cwd,tty}
+-- 运行期状态：[pane_id(number)] = {agent,state,since,rule,ctx,cost,cwd,tty,unread}
+-- unread：QQ 式未读计数——不在视线内发生的 →blocked / working→idle 各记 1，
+-- 聚焦该 pane 即清零（clear_unread / tab_badge）；徽章=你错过的事件，dot=持续状态
 local STATE = {}
 
 local function dbg(msg)
@@ -222,10 +224,13 @@ local function save_global()
   local parts = {}
   for pid, r in pairs(STATE) do
     parts[#parts + 1] = string.format(
-      '%s:{"agent":%s,"state":%s,"since":%s,"rule":%s,"ctx":%s,"cost":%s,"cwd":%s,"tty":%s}',
+      '"%s":{"agent":%s,"state":%s,"since":%s,"rule":%s,"ctx":%s,"cost":%s,"cwd":%s,"tty":%s,"unread":%s}',
       tostring(pid), esc(r.agent), esc(r.state), num(r.since), esc(r.rule or ''),
-      num(r.ctx), num(r.cost), esc(r.cwd or ''), esc(r.tty or ''))
+      num(r.ctx), num(r.cost), esc(r.cwd or ''), esc(r.tty or ''), num(r.unread))
   end
+  -- 注意：顶层 key 必须带引号（{"1":{…}}）才是合法 JSON——
+  -- 历史上这里没引号，json_parse 一直静默失败，回温形同虚设；
+  -- 未读数要跨 reload 存活后才暴露出来
   -- GLOBAL 赋值纯量字串，安全
   wezterm.GLOBAL.herd_state_json = '{' .. table.concat(parts, ',') .. '}'
 end
@@ -242,6 +247,7 @@ local function load_global()
         since = tonumber(v.since) or 0, rule = v.rule,
         ctx = tonumber(v.ctx), cost = tonumber(v.cost),
         cwd = v.cwd, tty = v.tty,
+        unread = tonumber(v.unread) or 0,
       }
     end
   end
@@ -268,9 +274,9 @@ local function write_current()
     local recs = {}
     for pid, r in pairs(STATE) do
       recs[#recs + 1] = string.format(
-        '{"pane":%s,"agent":%s,"state":%s,"since":%s,"rule":%s,"ctx":%s,"cost":%s,"cwd":%s,"tty":%s}',
+        '{"pane":%s,"agent":%s,"state":%s,"since":%s,"rule":%s,"ctx":%s,"cost":%s,"cwd":%s,"tty":%s,"unread":%s}',
         tostring(pid), esc(r.agent), esc(r.state), num(r.since), esc(r.rule or ''),
-        num(r.ctx), num(r.cost), esc(r.cwd or ''), esc(r.tty or ''))
+        num(r.ctx), num(r.cost), esc(r.cwd or ''), esc(r.tty or ''), num(r.unread))
     end
     table.sort(recs)
     local tmp = STATE_DIR .. '/.current.tmp'
@@ -286,9 +292,9 @@ local function append_transition(rec)
     ensure_dir()
     local f = io.open(STATE_DIR .. '/transitions.jsonl', 'a')
     f:write(string.format(
-      '{"ts":%s,"pane":%s,"agent":%s,"from":%s,"to":%s,"ctx":%s,"cost":%s,"cwd":%s}\n',
+      '{"ts":%s,"pane":%s,"agent":%s,"from":%s,"to":%s,"ctx":%s,"cost":%s,"cwd":%s,"unread":%s}\n',
       esc(os.date('%F %T')), tostring(rec.pane), esc(rec.agent), esc(rec.from),
-      esc(rec.to), num(rec.ctx), num(rec.cost), esc(rec.cwd or '')))
+      esc(rec.to), num(rec.ctx), num(rec.cost), esc(rec.cwd or ''), num(rec.unread)))
     f:close()
   end)
 end
@@ -314,8 +320,36 @@ local function focused_panes()
   return set
 end
 
+-- ── 未读清零（"已读"判定）──
+-- 只有 OS 焦点窗口的活动 pane 才算"你在看"：切换 tab / 切分屏焦点都会
+-- 经由 active_pane 反映出来。is_focused 若本 build 缺失（一次性 probe 落日志），
+-- 保守退化为全窗口活动 pane 都清零（与通知抑制口径一致）。
+local dirty = false -- 声明必须先于 clear_unread/update（后者赋值的是 upvalue）
+local flip = false -- 強制重繪交替值（跨 scan 持久，同值會被 wezterm 當 no-op）
+local focus_probe_done = false
+local function clear_unread()
+  pcall(function()
+    for _, w in ipairs(wezterm.mux.all_windows()) do
+      pcall(function()
+        local gw = w:gui_window()
+        local ok, isf = pcall(function() return gw:is_focused() end)
+        if not focus_probe_done then
+          focus_probe_done = true
+          dbg('is_focused probe: ' .. (ok and tostring(isf) or ('ERR ' .. tostring(isf))))
+        end
+        if ok and isf == false then return end -- 明确失焦才跳过
+        local pid = gw:active_pane():pane_id()
+        local r = STATE[pid]
+        if r and (r.unread or 0) > 0 then
+          r.unread = 0
+          dirty = true
+        end
+      end)
+    end
+  end)
+end
+
 -- ── 核心：单 pane 状态更新 ──
-local dirty = false
 
 local function update(pid, agent, info, pane, focused)
   local prev = STATE[pid]
@@ -334,6 +368,14 @@ local function update(pid, agent, info, pane, focused)
   end
 
   local from = prev and prev.state or 'new'
+  -- 未读计数：与通知同款抑制口径（focused_panes＝全窗口活动 pane 都算在看）。
+  -- 只有你没看到的 →blocked / working→idle 才算一条"未读消息"；封顶 99，显示层 >9 记 9+
+  local unread = prev and prev.unread or 0
+  if not focused[pid] then
+    if state == 'blocked' or (state == 'idle' and from == 'working') then
+      unread = math.min(unread + 1, 99)
+    end
+  end
   local tty = ''
   pcall(function() tty = pane:get_tty_name() or '' end)
   STATE[pid] = {
@@ -341,11 +383,12 @@ local function update(pid, agent, info, pane, focused)
     ctx = ctx, cost = cost,
     cwd = info.cwd or (prev and prev.cwd) or '',
     tty = tty,
+    unread = unread,
   }
   dirty = true
   append_transition({
     pane = pid, agent = agent, from = from, to = state,
-    ctx = ctx, cost = cost, cwd = STATE[pid].cwd,
+    ctx = ctx, cost = cost, cwd = STATE[pid].cwd, unread = unread,
   })
 
   -- 桌面通知：blocked 等你决策（critical）、跑完收工（normal）；聚焦中的 pane 不扰
@@ -371,6 +414,7 @@ local function scan()
   local seen = {}
   local n_agents = 0
   local focused = focused_panes()
+  clear_unread() -- "已读"：焦点窗口的活动 pane 清未读（在计数前先做，语义无冲突）
   for _, w in ipairs(wezterm.mux.all_windows()) do
     local ok_tabs, tabs = pcall(function() return w:tabs() end)
     if ok_tabs and type(tabs) == 'table' then
@@ -408,23 +452,49 @@ local function scan()
   if dirty then
     save_global()
     write_current()
+    -- 強制 tab bar 重繪：format-tab-title 是快取的，狀態變了它不會自己重跑；
+    -- 且 set_right_status 同值會被當 no-op（教訓：'固定空格'版本實測無效，
+    -- 徽章要等 ~30s 的自然重繪）。手段（並用，皆不可見）：
+    --   ① MuxTab:set_title 交替空格——tab_title 是 formatter 的直接輸入，
+    --      必然觸發重評（顯示層用 pane title，不受污染）
+    --   ② set_right_status 交替空格——雙保險
+    flip = not flip
+    pcall(function()
+      for _, w in ipairs(wezterm.mux.all_windows()) do
+        pcall(function() w:gui_window():set_right_status(flip and ' ' or '  ') end)
+        local ok_tabs, tabs = pcall(function() return w:tabs() end)
+        if ok_tabs and type(tabs) == 'table' then
+          for _, t in ipairs(tabs) do
+            pcall(function() t:set_title(flip and ' ' or '  ') end)
+          end
+        end
+      end
+    end)
     dirty = false
   end
   return n_seen, n_agents
 end
 
--- ── 轮询链（存活权杖制）──
--- 教训：每次 reload 有多个 runtime 上下文各跑一次 setup（GUI/connui/…），
--- 共用计数器会被侧上下文乱加 → 被采纳链被误杀。
--- 改为：arm 时才写入权杖；侧上下文的 handler 永不被调用 → 永不 arm → 永不误杀。
--- 新链 arm 时接管权杖，旧链在下一 tick 自灭。
-local my_token, armed = nil, false
+-- ── 轮询链（存活权杖制 + 心跳看门狗）──
+-- 教训一（原有）：reload 时多上下文各跑 setup，共用计数器被侧上下文乱加 → 权杖制。
+-- 教训二（实锤 03:57-03:58）：reload/override 会取消旧 universe 的 pending
+--   call_after——旧链无声蒸发（连 chain die 都不留）；且旧版 arm() 先置
+--   armed=true 再写 GLOBAL，一旦写抛错就被上層 pcall 吞掉，实例永久卡在
+--   「假活」，渲染路径不再重试。症状：灯冻结在最后一次落盘的状态（绿尸灯）、
+--   transition 断流、徽章不出。
+-- 对策：① arm 事务化：pcall 写 GLOBAL 成功后才置 armed；失败留日志下輪重试
+--       ② 心跳看门狗：tick 每輪打 last_beat；渲染/事件路徑調 arm() 時發現
+--          armed 且心跳停 >5s → 換新令牌重啟鏈（僵屍鏈下一 tick 令牌不符自滅）
+--   侧上下文 handler 永不被调用 → 永不 arm → 不会误杀（原权杖语义不变）。
+local my_token, armed, last_beat = nil, false, 0
 
 local function tick(token)
-  if wezterm.GLOBAL.herd_alive ~= token then
+  local ok_alive, alive = pcall(function() return wezterm.GLOBAL.herd_alive end)
+  if not ok_alive or alive ~= token then
     dbg('chain die ' .. tostring(token))
     return
   end
+  last_beat = os.time()
   if next(STATE) == nil then load_global() end      -- 重评估后回温
   local ok = pcall(scan)
   if not ok then dbg('scan ERR') end
@@ -432,11 +502,21 @@ local function tick(token)
 end
 
 local function arm()
-  if armed or not my_token then return end
+  if not my_token then return end
+  if armed and (os.time() - last_beat) <= 5 then return end -- 健康链：免打扰
+  local rearm = armed
+  if rearm then -- 看门狗复活：换令牌，僵尸链下一 tick 自灭
+    my_token = tostring(os.time()) .. ':' .. tostring(math.random())
+  end
+  local ok, err = pcall(function() wezterm.GLOBAL.herd_alive = my_token end)
+  if not ok then
+    dbg('arm GLOBAL ERR: ' .. tostring(err)) -- armed 未置位：下輪渲染路徑重試
+    return
+  end
+  dbg((rearm and 'watchdog rearm ' or 'armed ') .. my_token)
   armed = true
-  wezterm.GLOBAL.herd_alive = my_token -- 接管：旧链下一 tick 自灭
-  dbg('armed ' .. my_token)
-  tick(my_token) -- 立即扫一轮；后续自续链
+  last_beat = os.time()
+  tick(my_token) -- 立即扫一輪；后续自续链
 end
 
 -- ═══ 对外接口 ═══
@@ -444,12 +524,92 @@ end
 -- tab 状态点：非 agent pane 返回空表（调用方 ipairs 直接吃掉）
 -- 同时兼作启动器：config 重载必触发 tab 重绘 → dot_for → arm
 function M.dot_for(pane_id)
-  if not armed then arm() end
+  arm()
   local r = STATE[tonumber(pane_id)]
   if not r then return {} end
   return {
     { Foreground = { Color = STATE_COLOR[r.state] or '#6c7086' } },
     { Text = '● ' },
+  }
+end
+
+-- ═══ 方案A（tab 級聚合）：指示燈與未讀徽章各自獨立 ═══
+-- 指示燈 tab_dot  ：全 tab 最壞狀態（blocked > working > idle）——「有沒有事要我」
+-- 未讀徽章 tab_unread：QQ 式計數（上角標）——你錯過的 →blocked / 跑完了 事件數；
+--       聚焦該 pane 即清零。>9 顯示 ⁹⁺。燈=持續狀態、徽章=錯過的事件，互不耦合。
+-- 教訓（probe 實錦）：本 nightly 的 tab/pane 物件是 userdata（type(tab)=userdata），
+-- 不能用 type()==table 把關——以 pcall 包裹存取，失敗回空靜默降級。
+local PRECEDENCE = { blocked = 3, working = 2, idle = 1 }
+
+local function tab_records(tab)
+  local recs = {}
+  local ok = pcall(function()
+    local panes = tab.panes
+    if type(panes) ~= 'table' then error('panes not table: ' .. type(panes)) end
+    for _, p in ipairs(panes) do
+      local r = STATE[p.pane_id]
+      if r then recs[#recs + 1] = r end
+    end
+  end)
+  if not ok then return nil end
+  return recs
+end
+
+-- ── 渲染遙測：量「偵測→上屏」延遲 ──
+-- format-tab-title 重跑時，若本 tab 的(燈/未讀)有變則留痕；
+-- 與 transitions.jsonl 的 ts 對照即可量出渲染延遲（優化後應 ≤1-2s）
+local last_render = {}
+local function log_render(tab, key, val)
+  pcall(function()
+    local k = tostring(tab.tab_id) .. ':' .. key
+    if last_render[k] ~= val then
+      last_render[k] = val
+      dbg(('render %s = %s'):format(k, tostring(val)))
+    end
+  end)
+end
+
+-- 指示燈（獨立）：非 agent tab 返回空表（調用方 ipairs 直接吃掉）
+function M.tab_dot(tab)
+  arm()
+  local recs = tab_records(tab)
+  if not recs then return {} end
+  local best = 0
+  for _, r in ipairs(recs) do
+    local pr = PRECEDENCE[r.state] or 0
+    if pr > best then best = pr end
+  end
+  if best == 0 then return {} end
+  local state = best == 3 and 'blocked' or (best == 2 and 'working' or 'idle')
+  log_render(tab, 'dot', state)
+  return {
+    { Foreground = { Color = STATE_COLOR[state] or '#6c7086' } },
+    { Text = '● ' },
+  }
+end
+
+-- 未讀徽章（獨立）：QQ 式紅底反白藥丸；無未讀返回空表；>9 記 9+
+-- 細節：① 底色復位按 tab.is_active 分流——作用中 tab 標題坐在 #313244
+-- 焦點藥丸上，非作用中坐在 tab 欄底 #1e1e2e，復位錯色會截斷焦點藥丸/漏染標題
+--       ② Intensity=Bold 會殘留到後續文字，用後必須復位 Normal
+function M.tab_unread(tab)
+  arm()
+  local recs = tab_records(tab)
+  if not recs then return {} end
+  local n = 0
+  for _, r in ipairs(recs) do n = n + (r.unread or 0) end
+  log_render(tab, 'unread', n)
+  if n == 0 then return {} end
+  local base = '#1e1e2e'
+  pcall(function() if tab.is_active then base = '#313244' end end)
+  return {
+    { Background = { Color = '#f38ba8' } },    -- 紅底（Catppuccin red）
+    { Foreground = { Color = '#1e1e2e' } },    -- 深色數字（反白）
+    { Attribute = { Intensity = 'Bold' } },
+    { Text = ' ' .. (n > 9 and '9+' or tostring(n)) .. ' ' },
+    { Background = { Color = base } },          -- 復位（防紅底漏染後續）
+    { Attribute = { Intensity = 'Normal' } },   -- 復位（防 Bold 殘留）
+    { Text = ' ' },                              -- 與標題隔開
   }
 end
 
