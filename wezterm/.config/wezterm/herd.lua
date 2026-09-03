@@ -101,13 +101,20 @@ local function word_has(s, tok)
   return type(s) == 'string' and s:find('%f[%w]' .. tok .. '%f[%W]') ~= nil
 end
 
-local function identify(info)
-  local cands = { info.name }
+-- 候选词：进程自身的 name / executable / argv 前 3 项
+local function candidates_of(info)
+  local cands = {}
+  if type(info) ~= 'table' then return cands end
+  if type(info.name) == 'string' and info.name ~= '' then cands[#cands + 1] = info.name end
   local exe = basename(info.executable or '')
   if exe ~= '' then cands[#cands + 1] = exe end
   if type(info.argv) == 'table' then
     for i = 1, math.min(#info.argv, 3) do cands[#cands + 1] = basename(info.argv[i]) end
   end
+  return cands
+end
+
+local function match_tokens(cands)
   for agent, def in pairs(AGENTS) do
     for _, tok in ipairs(def.token) do
       for _, c in ipairs(cands) do
@@ -116,6 +123,22 @@ local function identify(info)
     end
   end
   return nil
+end
+
+-- 识别：自身 → 子进程族谱（一層）
+-- 子进程扫描抄自 agent-deck detector.lua 的思路：套壳启动
+-- （npm run claude / fence -- claude / 包装脚本）时前景进程认不出，
+-- 翻 children 兜底。返回 agent, 来源（self/children，供诊断日志）
+local function identify(info)
+  local hit = match_tokens(candidates_of(info))
+  if hit then return hit, 'self' end
+  if type(info.children) == 'table' then
+    for _, ch in pairs(info.children) do
+      hit = match_tokens(candidates_of(ch))
+      if hit then return hit, 'children' end
+    end
+  end
+  return nil, 'none'
 end
 
 -- 取 pane 底部窗口：返回底部 N 个非空行组成的数组
@@ -360,9 +383,12 @@ local function scan()
               seen[pid] = true
               local info = pane:get_foreground_process_info()
               if type(info) == 'table' then
-                local agent = identify(info)
+                local agent, src = identify(info)
                 if agent then
                   n_agents = n_agents + 1
+                  if src == 'children' then
+                    dbg(('identify via children: pane %d = %s'):format(pid, agent))
+                  end
                   update(pid, agent, info, pane, focused)
                 else
                   clear(pid) -- 前景进程不是已知 agent（退回 shell 等）
