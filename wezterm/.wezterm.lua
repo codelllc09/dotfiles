@@ -134,6 +134,7 @@ config.colors.tab_bar = {
 
 -- ── 行为 ──────────────────────────────────────
 config.scrollback_lines = 10000
+config.tab_max_width = 24 -- 默認 16：藥丸(15格)+佈局碼會被硬切只露一個字符
 
 -- ── 输入法自动愈合 ──
 -- 实测环境：Fedora 44 / gnome-shell+mutter 50.0→50.4 / ibus 1.5.34-rc1→1.5.34 / wezterm 20260901 nightly
