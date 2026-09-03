@@ -95,12 +95,14 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, conf, hover, max_width
       { Text = ' [' .. rime_badge() .. '] ' },
     }
     for _, e in ipairs(herd_dot) do els[#els + 1] = e end
-    if herd_code ~= '' then
-      els[#els + 1] = { Foreground = { Color = '#585b70' } } -- 佈局碼暗灰
-      els[#els + 1] = { Text = herd_code .. ' ' }
-    end
     els[#els + 1] = { Foreground = { Color = '#cdd6f4' } } -- 标题亮色（状态点后重设，防染色）
     els[#els + 1] = { Text = title .. ' ' }
+    -- 佈局碼：藥丸外的額外部分（退出藥丸底色後再渲染）
+    if herd_code ~= '' then
+      els[#els + 1] = { Background = { Color = '#1e1e2e' } } -- 退出藥丸底色
+      els[#els + 1] = { Foreground = { Color = '#585b70' } }
+      els[#els + 1] = { Text = herd_code .. ' ' }
+    end
     return wezterm.format(els)
   else
     local els = {
@@ -108,12 +110,13 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, conf, hover, max_width
       { Text = ' [·] ' },
     }
     for _, e in ipairs(herd_dot) do els[#els + 1] = e end
-    if herd_code ~= '' then
-      els[#els + 1] = { Foreground = { Color = '#585b70' } } -- 佈局碼暗灰
-      els[#els + 1] = { Text = herd_code .. ' ' }
-    end
     els[#els + 1] = { Foreground = { Color = '#6c7086' } } -- 恢复灰阶（防状态点染色标题）
     els[#els + 1] = { Text = title .. ' ' }
+    -- 佈局碼：藥丸外的額外部分
+    if herd_code ~= '' then
+      els[#els + 1] = { Foreground = { Color = '#585b70' } }
+      els[#els + 1] = { Text = herd_code .. ' ' }
+    end
     return wezterm.format(els)
   end
 end)
