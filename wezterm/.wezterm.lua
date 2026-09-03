@@ -64,6 +64,17 @@ local function rime_mode_read()
   return s
 end
 
+-- 徽章字形：简=◇ 繁=◆（同源异繁简，皆 1 格宽；CJK 徽章 2 格会令药丸
+-- 随输入法切换抖动，故在显示层替换。rime 协议与游标色键名不变）
+local BADGE_GLYPH = {
+  ['汉'] = '◇',
+  ['漢'] = '◆',
+}
+local function rime_badge()
+  local mode = rime_mode_read()
+  return BADGE_GLYPH[mode] or mode
+end
+
 wezterm.on('format-tab-title', function(tab, tabs, panes, conf, hover, max_width)
   local title = tab.active_pane.title or ''
   -- herd 状态点：agent pane 才有；任何失败静默回退为无点，不影响原渲染
@@ -73,7 +84,7 @@ wezterm.on('format-tab-title', function(tab, tabs, panes, conf, hover, max_width
     local els = {
       { Background = { Color = '#313244' } },  -- 焦点 tab 药丸底色
       { Foreground = { Color = '#b4befe' } },   -- 徽标 accent 蓝
-      { Text = ' [' .. rime_mode_read() .. '] ' },
+      { Text = ' [' .. rime_badge() .. '] ' },
     }
     for _, e in ipairs(herd_dot) do els[#els + 1] = e end
     els[#els + 1] = { Foreground = { Color = '#cdd6f4' } } -- 标题亮色（状态点后重设，防染色）
