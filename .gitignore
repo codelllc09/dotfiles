@@ -1,0 +1,7 @@
+# 執行期產物 / 敏感內容不入庫
+*.log
+*.tmp
+# rime 用戶資料庫（將來收編 rime 包時）
+*.userdb/
+*.userdb
+installation.yaml
