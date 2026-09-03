@@ -468,8 +468,8 @@ end
 local function strip_groups(panes, is_h)
   local keyed = {}
   for _, p in ipairs(panes) do
-    local lo = is_h and p.left_col or p.top_row
-    local hi = is_h and (p.left_col + p.width) or (p.top_row + p.height)
+    local lo = is_h and p.left or p.top
+    local hi = is_h and (p.left + p.width) or (p.top + p.height)
     keyed[#keyed + 1] = { lo = lo, hi = hi, p = p }
   end
   table.sort(keyed, function(a, b) return a.lo < b.lo end)
@@ -514,11 +514,43 @@ local function enc_layout(panes, axis) -- 返回 code, used_axis
 end
 
 local layout_dumped = {}
-function M.layout_code(tab)
+local layout_probe = false
+function M.layout_code(tab, panes3)
+  -- 一次性探针：逐项体检 tab.panes 与第三参数 panes 的可访问性
+  if not layout_probe then
+    layout_probe = true
+    local function try(label, f)
+      local ok, v = pcall(f)
+      dbg('probe ' .. label .. ': ' .. (ok and tostring(v) or ('ERR ' .. tostring(v))))
+    end
+    local tp = tab and tab.panes
+    try('type(tab)', function() return type(tab) end)
+    try('type(tab.panes)', function() return type(tp) end)
+    try('#tab.panes', function() return #tp end)
+    try('tp[1] type', function() return type(tp[1]) end)
+    try('tp[1].pane_id', function() return tostring(tp[1].pane_id) end)
+    try('tp[1].left_col', function() return tostring(tp[1].left_col) end)
+    try('tp[1].width', function() return tostring(tp[1].width) end)
+    try('ipairs(tp) count', function() local n = 0 for _ in ipairs(tp) do n = n + 1 end return n end)
+    try('type(p3)', function() return type(panes3) end)
+    if type(panes3) == 'table' or type(panes3) == 'userdata' then
+      try('#p3', function() return #panes3 end)
+      try('p3[1].pane_id', function() return tostring(panes3[1].pane_id) end)
+      try('p3[1].left_col', function() return tostring(panes3[1].left_col) end)
+      try('p3[1].width', function() return tostring(panes3[1].width) end)
+      try('ipairs(p3) count', function() local n = 0 for _ in ipairs(panes3) do n = n + 1 end return n end)
+    end
+  end
   local panes = tab and tab.panes
-  if type(panes) ~= 'table' or #panes == 0 then return '' end
-  local ok, code = pcall(function() return (enc_layout(panes, 'H')) end)
-  if not ok or type(code) ~= 'string' then return '' end
+  if type(panes) ~= 'table' or #panes == 0 then
+    dbg('layout guard 拦截: type=' .. type(panes))
+    return ''
+  end
+  local ok, code = pcall(enc_layout, panes, 'H')
+  if not ok then
+    dbg('layout ENC ERR: ' .. tostring(code))
+    return ''
+  end
   -- 驗證協議：每 (tab, 窗格数) 组合首次渲染时落一份幾何+碼的證據
   local key = tostring(tab.tab_id) .. '#' .. #panes
   if not layout_dumped[key] then
@@ -526,7 +558,7 @@ function M.layout_code(tab)
     local bits = {}
     for _, p in ipairs(panes) do
       bits[#bits + 1] = string.format('%d:[%d,%d %dx%d]',
-        p.pane_id or -1, p.left_col or -1, p.top_row or -1, p.width or -1, p.height or -1)
+        p.pane_id or -1, p.left or -1, p.top or -1, p.width or -1, p.height or -1)
     end
     dbg('layout tab' .. key .. ' {' .. table.concat(bits, ' ') .. '} => ' .. code)
   end
