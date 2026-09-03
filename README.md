@@ -17,7 +17,14 @@ wezterm/
 
 - **編輯**：直接改 live 路徑或倉庫路徑都一樣（同一個檔案），改完即生效
 - **提交**：`cd ~/dotfiles && git add -A && git commit`
-- **新機器**：`git clone … ~/dotfiles && ~/dotfiles/install.sh`
+- **新機器（Linux）**：`git clone … ~/dotfiles && ~/dotfiles/install.sh`
+- **新機器（Windows）**：
+  ```powershell
+  git clone <repo-url> $env:USERPROFILE\dotfiles
+  powershell -ExecutionPolicy Bypass -File $env:USERPROFILE\dotfiles\install.ps1
+  ```
+  注意兩端語義不同：Linux 是 symlink（倉庫即真身），Windows 是複製（改完要
+  commit push，兩端各自 pull 後重跑安裝腳本）
 - **新增工具**：`mkdir rime && mv ~/.config/ibus/rime/* rime/` 之類，
   再跑 `./install.sh`（記得加 .gitignore 排除執行期產物）
 

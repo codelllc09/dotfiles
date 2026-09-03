@@ -50,7 +50,7 @@ end)
 -- → tab 状态点 + ~/.local/state/wezterm-herd/ 落盘 + GNOME 通知
 -- 实测本 build 不解析 XDG 主档路径：主档必须在 ~/.wezterm.lua；
 -- herd.lua 仍在 ~/.config/wezterm/（经 package.path 引入，家目录不堆模块）
-package.path = os.getenv('HOME') .. '/.config/wezterm/?.lua;' .. package.path
+package.path = wezterm.home_dir .. '/.config/wezterm/?.lua;' .. package.path
 local herd_ok, herd = pcall(require, 'herd')
 if not herd_ok then herd = nil end -- 模块坏了只丢状态点，不影响其它
 if herd then herd.setup() end
