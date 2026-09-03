@@ -66,9 +66,9 @@ end
 
 wezterm.on('format-tab-title', function(tab, tabs, panes, conf, hover, max_width)
   local title = tab.active_pane.title or ''
-  -- herd 状态点：agent pane 才有；任何失败静默回退为无点，不影响原渲染
+  -- herd 状态点：一 tab 多分屏时每 agent pane 一枚；任何失败静默回退无点
   local herd_dot = {}
-  if herd then pcall(function() herd_dot = herd.dot_for(tab.active_pane.pane_id) end) end
+  if herd then pcall(function() herd_dot = herd.dots_for(panes) end) end
   if tab.is_active then
     local els = {
       { Background = { Color = '#313244' } },  -- 焦点 tab 药丸底色
