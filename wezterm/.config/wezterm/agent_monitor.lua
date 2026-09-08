@@ -42,6 +42,11 @@ local STATE = {}
 --   套壳启动（npm run claude）时也能出 claude 而非 node）
 local APPS = {}
 
+-- children 识别来源的已记缓存：[pane_id] = true。「identify via children」日志
+-- 每 pane 只记首次（旧版每秒重记同一来源，套壳 agent 跑一天 = 8.6 万行 +
+-- 每秒一次磁盘写，2026-09-09 日志节流）
+local seen_src = {}
+
 local function dbg(msg)
   local f = io.open('/tmp/herd-debug.log', 'a')
   if f then f:write(os.date('%H:%M:%S '), tostring(msg), '\n'); f:close() end
@@ -444,7 +449,8 @@ local function scan()
                 APPS[pid] = agent or exe
                 if agent then
                   n_agents = n_agents + 1
-                  if src == 'children' then
+                  if src == 'children' and not seen_src[pid] then
+                    seen_src[pid] = true
                     dbg(('identify via children: pane %d = %s'):format(pid, agent))
                   end
                   update(pid, agent, info, pane, focused)
@@ -465,6 +471,9 @@ local function scan()
   end
   for pid in pairs(APPS) do
     if not seen[pid] then APPS[pid] = nil end
+  end
+  for pid in pairs(seen_src) do
+    if not seen[pid] then seen_src[pid] = nil end -- pane 消亡同步清缓存，防日积月累
   end
   if dirty then
     save_global()
@@ -659,7 +668,8 @@ end
 function M.setup()
   load_global()
   my_token = tostring(os.time()) .. ':' .. tostring(math.random())
-  dbg('setup ' .. my_token)
+  -- （2026-09-09 日志节流）不再记 setup 行：每次重求值 × ~7 个运行时上下文各跑
+  -- 一次本函数，实测 96.5% 是侧上下文噪音；功能性重求值看 armed 行才是精确计数
   -- 历史遗留清理：右状态栏曾被本模块写入，内容会跨 reload 驻留。
   -- 经验：空串疑似被当 no-op，用单空格强制覆盖；每 eval 一次即可。
   local rs_cleared = false

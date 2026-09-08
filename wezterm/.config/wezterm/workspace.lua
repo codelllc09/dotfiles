@@ -269,5 +269,5 @@ end)
 M.key_tables = {}
 M._internal = { ordered_names = ordered_names, open_drawer = open_drawer }
 
-dbg('workspace.lua loaded (v3.3 drawer)')
+-- （2026-09-09 日志节流）不再记 loaded 行：每次求值每上下文一条，纯噪音
 return M

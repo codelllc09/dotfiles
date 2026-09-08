@@ -53,8 +53,13 @@ local function term_size()
   return 24, 80
 end
 
+-- 键序列 dump（调试期遗留，2026-09-09 默认关闭）：仅 WS_KEYS_DEBUG=1 时写
+-- /tmp/ws-keys.log（需从带该变量的环境启动 wezterm，抽屉子进程继承）。排查
+-- 新键盘/IME 异常序列时临时开；常态零写盘。
+local KEYLOG_ON = os.getenv('WS_KEYS_DEBUG') == '1'
 local KEYLOG = '/tmp/ws-keys.log'
 local function klog(bytes, note)
+  if not KEYLOG_ON then return end
   local f = io.open(KEYLOG, 'a')
   if f then
     local hex = {}
