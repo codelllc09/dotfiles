@@ -87,12 +87,17 @@ local function ime_heal()
   local now = os.time()
   if now - (wezterm.GLOBAL.ime_heal_at or 0) < 3 then return end -- 节流：3 秒内至多检一次
   wezterm.GLOBAL.ime_heal_at = now
-  local f = io.popen('ibus engine 2>/dev/null')
+  -- timeout 1 封顶（P1-2 2026-09-09）：本函数跑在 GUI 主线程，io.popen +
+  -- read('*a') 是无上界同步等待——ibus daemon 卡死时（恰是解锁竞态最易发生
+  -- 的时刻）D-Bus 默认超时 ≈25s，全窗口假死。timeout 到点杀子进程 → 管道
+  -- EOF → read 立即返回，最坏阻塞 1s；正常路径 timeout 原地陪跑，零差异。
+  local f = io.popen('timeout 1 ibus engine 2>/dev/null')
   if not f then return end
   local engine = f:read('*a') or ''
   f:close()
+  if engine == '' then return end -- 查询被 timeout 杀/失败：本轮跳过（“不知道”≠“不是 rime”）
   if engine:match('rime') then return end -- 引擎已是 rime，无需继续
-  local g = io.popen('gsettings get org.gnome.desktop.input-sources mru-sources 2>/dev/null')
+  local g = io.popen('timeout 1 gsettings get org.gnome.desktop.input-sources mru-sources 2>/dev/null')
   if not g then return end
   local mru = g:read('*a') or ''
   g:close()
@@ -107,7 +112,9 @@ local function ime_heal()
     lg:close()
   end
 end
+-- 只挂 focus 事件（P1-2 B 档，2026-09-09）：解锁竞态/输入源切换必伴随窗口
+-- 焦点变化，检测一次不漏；摘掉 update-right-status 挂载，消掉常态下每 3s
+-- 一次的常驻 fork（GUI 线程上的同步子进程）。
 wezterm.on('window-focus-changed', function(window, pane) ime_heal() end)
-wezterm.on('update-right-status', function(window, pane) ime_heal() end)
 
 return M

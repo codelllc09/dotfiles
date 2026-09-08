@@ -319,9 +319,16 @@ table.insert(config.keys, { key = 'phys:Space', mods = 'CTRL|SHIFT', action = we
 table.insert(config.keys, { key = ' ', mods = 'CTRL|SHIFT', action = wezterm.action.DisableDefaultAssignment })
 
 -- ── workspace 接入（Ctrl+Shift+O 选择器；右栏 Workspace n/m 显示由该模块注册）──
-if ws_ok then
-  for _, k in ipairs(workspace.keys) do table.insert(config.keys, k) end
-  config.key_tables = workspace.key_tables
+-- 接口校验（P2-4 2026-09-09）：pcall 只保加载、不保导出。若模块加载成功但
+-- M.keys/M.key_tables 缺失（手滑改名/改 return），裸取 .keys 会在顶层抛错
+-- → 整份配置静默回退默认（守则⑥）。按件校验、按件降级，兑现“坏了只丢对应功能”。
+if ws_ok and type(workspace) == 'table' then
+  if type(workspace.keys) == 'table' then
+    for _, k in ipairs(workspace.keys) do table.insert(config.keys, k) end
+  end
+  if type(workspace.key_tables) == 'table' then
+    config.key_tables = workspace.key_tables
+  end
 end
 
 -- ── 複製模式鍵表增補（2026-09-08 v2，討論定案：保留 vim 默認手感）──
@@ -340,7 +347,7 @@ if ck_ok and copy_keys and copy_keys.copy_mode then
 end
 
 -- ── compose 接入（Ctrl+Shift+I 中文緩衝輸入窗；流式輸出時防 Rime 候選框閃爍）──
-if ce_ok then
+if ce_ok and type(compose) == 'table' and type(compose.keys) == 'table' then
   for _, k in ipairs(compose.keys) do table.insert(config.keys, k) end
 end
 
