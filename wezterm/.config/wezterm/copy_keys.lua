@@ -31,6 +31,41 @@ local act = wezterm.action
 
 local M = {}
 
+-- ── 清选区兜底（2026-09-09 ④）：search 态 Esc 落位后 0.08s 的
+-- ClearSelectionMode 是 pending 定时器；80ms 窗口内撞上 IME 切换（rime
+-- override 全量重求值）或手动存配置 → 定时器被杀 → 匹配词自动选中（隐藏
+-- 锚点）复活。守则④要求延迟逻辑幂等且可重挂：快路径照旧 80s 直清；慢路径
+-- 以 GLOBAL 纯量记「待清时间戳」，由本模块 eval 期注册的 urs handler 兜底
+-- 补刀（层已非 copy_mode 则 TTL 过期弃单）。
+local function esc_land(window, pane)
+  wezterm.GLOBAL.pending_clear_sel_at = os.time()
+  wezterm.time.call_after(0.08, function()
+    local at = wezterm.GLOBAL.pending_clear_sel_at
+    pcall(function()
+      if window:active_key_table() == 'copy_mode' then
+        window:perform_action(wezterm.action.CopyMode 'ClearSelectionMode', pane)
+      end
+    end)
+    if at == wezterm.GLOBAL.pending_clear_sel_at then
+      wezterm.GLOBAL.pending_clear_sel_at = nil -- 快路径已落地，撤单
+    end
+  end)
+end
+
+wezterm.on('update-right-status', function(window, pane)
+  local at = wezterm.GLOBAL.pending_clear_sel_at
+  if type(at) ~= 'number' then return end
+  local kt = select(2, pcall(function() return window:active_key_table() end))
+  if kt == 'copy_mode' then
+    wezterm.GLOBAL.pending_clear_sel_at = nil
+    pcall(function()
+      window:perform_action(wezterm.action.CopyMode 'ClearSelectionMode', pane)
+    end)
+  elseif os.time() - at > 3 then
+    wezterm.GLOBAL.pending_clear_sel_at = nil -- TTL 过期：早已出层，弃单
+  end
+end)
+
 -- ═══ 退出鍵設計史(2026-09-09,三連敗後定稿)═══
 -- q 直接退 → 誤觸(w 相鄰);:q 時間戳 → 無可視反饋;: 輸入框(PromptInputLine)
 -- → 本 build 陣亡(連框都不彈,覆蓋層組件全家族滅,見主配置頭註釋)。
@@ -158,9 +193,8 @@ M.search_mode = {
   -- (0.08s)、再同层清选区——层切换绝不组合(本 build 组合会被异步拆除吃掉)。
   { key = 'Escape', mods = 'NONE', action = wezterm.action_callback(function(window, pane)
     window:perform_action(wezterm.action.CopyMode 'AcceptPattern', pane)
-    wezterm.time.call_after(0.08, function()
-      window:perform_action(wezterm.action.CopyMode 'ClearSelectionMode', pane)
-    end)
+    esc_land(window, pane) -- 两段式：先落位（层切换组合动作必被异步拆除，不能拼链）；
+    -- 清选区走 esc_land：快路径 80ms 直清 + GLOBAL 兜底补刀（可重挂，见模块头注）
   end) },
   { key = 'n', mods = 'CTRL', action = act.CopyMode 'NextMatch' },
   { key = 'p', mods = 'CTRL', action = act.CopyMode 'PriorMatch' },

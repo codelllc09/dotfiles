@@ -61,15 +61,14 @@ end
 
 -- ═══ 渲染 ═══
 local C = { dim = '#585b70', text = '#cdd6f4', accent = '#b4befe', red = '#f38ba8' }
-local flash_msg, flash_token = nil, 0
+-- flash 消息（零定時器版，2026-09-09）：過期判定交給 render() 的自然節拍
+-- （urs/focus 必發），不再有可被重載殺死的 pending call_after——舊版 2.5s
+-- 清除定時器一旦撞上 IME 切換（守則④重求值）就被殺，紅字永駐右欄。
+local flash_msg, flash_until = nil, 0
 
 local function flash(msg)
   flash_msg = msg
-  flash_token = flash_token + 1
-  local tok = flash_token
-  wezterm.time.call_after(2.5, function()
-    if flash_token == tok then flash_msg = nil end
-  end)
+  flash_until = os.time() + 3
 end
 
 local function current_workspace(window)
@@ -77,6 +76,7 @@ local function current_workspace(window)
 end
 
 local function render(window)
+  if flash_msg and os.time() > flash_until then flash_msg = nil end -- 零定時器：過期自清
   local ok, err = pcall(function()
     local names = ordered_names()
     local cur = current_workspace(window) or 'default'
@@ -117,7 +117,7 @@ end
 -- pane 子进程新建的 /tmp 文件，实测 No such file or directory）═══
 -- TUI finish() 把动作编码为 pane 标题 'ws-pick:<op>:<name>' 并保活 1.2s；
 -- 本函数在 update-right-status 里扫描 mux pane 标题并派发。
-local last_sig = '' -- 已消费签名（防重复；pane 标题在保活期会被多次扫到）
+local last_sig, last_sig_at = '', 0 -- 已消费签名＋时间戳（防重复；见 consume_pending 内注）
 
 local function consume_pending(window, pane)
   local found_op, found_name, found_pane = nil, nil, nil
@@ -139,9 +139,15 @@ local function consume_pending(window, pane)
   end)
   if not found_op then return false end
 
+  -- 時間窗去重（2026-09-09）：舊簽名只有 op:name 且永不過期——連續兩次切同
+  -- 一個工作區（dev→scratch→dev 高頻流）第二次被靜默吞掉。改為「同名且 3s
+  -- 内」才視為同一保活期的重複掃描（TUI 保活 1.2s，3s 留足餘量）；超窗即新
+  -- 選擇，正常消費。邊緣：3-4s 内連選同名兩次會被誤吞（1s 抽屜防抖下幾乎
+  -- 不可達），自癒——3s 後再選即通。
   local sig = found_op .. ':' .. found_name
-  if sig == last_sig then return false end
-  last_sig = sig
+  local now = os.time()
+  if sig == last_sig and now - last_sig_at < 3 then return false end
+  last_sig, last_sig_at = sig, now
 
   if found_op == 'goto' or found_op == 'new' then
     local ok, err = pcall(function()
@@ -156,10 +162,17 @@ end
 
 -- 定时器兜底链：150ms 扫描标题消费（探针实测 idle 时 urs 不触发，链可靠跳动）；
 -- 消费即停；90s 上限防幽灵；重载杀链后由 urs 处理器重挂（GLOBAL 标量存活）
+-- 自滅修復（P1-3 2026-09-09）：cancel 無標題可消費 → ws_alive 無人清 →
+-- urs 每 250ms 重掛且 arm_poll 無條件清零 poll_ticks → 90s 上限被永遠重置，
+-- cancel 後鏈成永動機（每 150ms 全 mux 掃描直到下次成功切換）。修：fresh
+-- 參數分離「開抽屜重掛」與「urs 續掛」——只有前者重置計數；到點自滅順手清
+-- ws_alive。無害性：消費主通道是 urs 處理器自身的 consume_pending（每次必
+-- 跑），本鏈只是 urs 安静時的保險帶；清標誌只影響續掛，抽屜超 90s 再選仍
+-- 被 urs 兜住。
 local poll_token, poll_ticks = 0, 0
-local function arm_poll(window, pane)
+local function arm_poll(window, pane, fresh)
   poll_token = poll_token + 1
-  poll_ticks = 0
+  if fresh then poll_ticks = 0 end
   local tok = poll_token
   local function tick()
     if poll_token ~= tok then return end
@@ -168,7 +181,10 @@ local function arm_poll(window, pane)
       wezterm.GLOBAL.ws_alive = nil
       return
     end
-    if poll_ticks > 600 then return end -- 90s 兜底上限
+    if poll_ticks > 600 then
+      wezterm.GLOBAL.ws_alive = nil -- 90s 兜底：自滅並清標誌，urs 不再續掛
+      return
+    end
     wezterm.time.call_after(0.15, tick)
   end
   wezterm.time.call_after(0.15, tick)
@@ -177,6 +193,12 @@ end
 -- ═══ 主键：Ctrl+Shift+O 拉起抽屉 ═══
 -- 工作区清单快照经 argv 传入（名字:pane数 对）→ TUI 零子进程、启动即绘、数据新鲜
 local function open_drawer(window, pane)
+  -- 覆蓋層門禁（2026-09-09）：copy/search 鍵表未綁 CTRL|SHIFT+O → fall
+  -- through 到全局鍵，層内按 O 照樣觸發本函數；top_level split＝同窗口布局
+  -- 變化＝清覆蓋層（守則③）。層内直接忽略——先出層再拉抽屜。放在防重入
+  -- 之前，被攔截的按鍵不消耗防抖預算。
+  local kt = select(2, pcall(function() return window:active_key_table() end))
+  if kt then return end
   -- 防重入（2026-09-09 P0）：key repeat 連發會以 ~30cps 疊出幾十個 top_level
   -- 抽屜 pane（pane churn＋arm_poll 鏈混戰，守則⑨同族）。GLOBAL 純量跨
   -- reload 存活；正常流（Esc 掉再重開）間隔遠超 1s，不受影響。
@@ -214,7 +236,7 @@ local function open_drawer(window, pane)
   if ok and p2 then
     dbg('drawer open pane=' .. tostring(select(2, pcall(function() return p2:pane_id() end))))
     wezterm.GLOBAL.ws_alive = 1
-    arm_poll(window, pane)
+    arm_poll(window, pane, true) -- fresh=true：開抽屜才重置 90s 計數（見 arm_poll 注）
   else
     dbg('split err: ' .. tostring(p2))
     flash('drawer spawn failed (see ws-debug)')
@@ -233,7 +255,7 @@ wezterm.on('update-right-status', function(window, pane)
   if consume_pending(window, pane) then
     wezterm.GLOBAL.ws_alive = nil
   end
-  if wezterm.GLOBAL.ws_alive == 1 then arm_poll(window, pane) end
+  if wezterm.GLOBAL.ws_alive == 1 then arm_poll(window, pane, false) end -- 續掛不重置計數（自滅修復）
 end)
 
 -- 焦点回迁（抽屉关闭后必发）：第三消费入口
