@@ -6,12 +6,16 @@
 --   M.setup(config) → 注入主 config 引用（游标色 override 时保留 tab_bar 配色）
 --   M.badge()       → 焦点 tab 徽章字形（'·'/西文，'◇'/简中，'◆'/繁中）
 -- 内部行为（拆进来时就有的三件事）：
---   ① update-right-status：读 /tmp/rime-mode → 游标变色（Rime 推 title 触发重绘）
+--   ① update-right-status：读会话运行目录中的 rime-mode → 游标变色
+--      （2026-09-09 加固：copy/search 層內門禁跳過 + 1s 防抖合併——層內
+--        call_after 定時器不再被重求值誤殺，快速切換不再連環重載）
 --   ② ime_heal：window-focus/update-right-status 时检测 ibus 引擎被覆盖成 xkb → 自动恢复
 --   ③ 徽章字形替换：简◇繁◆（1 格宽，防药丸随输入法切换抖动）
 local wezterm = require 'wezterm'
 local M = {}
 local config_ref = nil
+local runtime_dir = os.getenv('XDG_RUNTIME_DIR') or '/tmp'
+local rime_mode_file = runtime_dir .. '/rime-mode'
 
 function M.setup(config)
   config_ref = config
@@ -26,12 +30,24 @@ local CURSOR_COLORS = {
   ['漢'] = '#e64553', -- 深红: 繁中
 }
 wezterm.GLOBAL.rime_cursor_color = nil
+wezterm.GLOBAL.rime_cursor_at = 0
 wezterm.on('update-right-status', function(window, pane)
-  local f = io.open('/tmp/rime-mode', 'r')
+  -- ── 2026-09-09 加固兩件套(重載風暴消音,保留變色)──
+  -- ① 模式門禁:copy/search 層內一律不 override。set_config_overrides 的全量
+  --    重求值會殺光 pending call_after(搜索態 Esc 落位清選區 80ms 定時器等
+  --    會被殺→選區賴着不走)。閱讀/抄取時不會切 IME;出層後顏色自動追平
+  local kt = select(2, pcall(function() return window:active_key_table() end))
+  if kt == 'copy_mode' or kt == 'search_mode' then return end
+  local f = io.open(rime_mode_file, 'r')
   if not f then return end
   local s = f:read('*l'); f:close()
   local color = CURSOR_COLORS[s]
-  if not color or color == wezterm.GLOBAL.rime_cursor_color then return end -- 防抖
+  if not color or color == wezterm.GLOBAL.rime_cursor_color then return end -- 同色防抖
+  -- ② 防抖合併:1 秒內的後續變更跳過本次(不更新存色)→下個 urs tick
+  --    重檢重試,窗口過後必然追平(自愈;os.time 秒級粒度,同 ime_heal 範式)
+  local now = os.time()
+  if now - (tonumber(wezterm.GLOBAL.rime_cursor_at) or 0) < 1 then return end
+  wezterm.GLOBAL.rime_cursor_at = now
   wezterm.GLOBAL.rime_cursor_color = color
   window:set_config_overrides {
     colors = {
@@ -42,9 +58,9 @@ wezterm.on('update-right-status', function(window, pane)
   }
 end)
 
--- 徽标：焦点 tab 现读状态文件（重绘由 Rime 推送 set-tab-title 触发，零轮询）
+-- 徽标：焦点 tab 现读状态文件；Rime 推送立即重绘，周期事件负责兜底。
 local function rime_mode_read()
-  local f = io.open('/tmp/rime-mode', 'r')
+  local f = io.open(rime_mode_file, 'r')
   if not f then return '·' end
   local s = f:read('*l'); f:close()
   if s == nil or s == '' then return '·' end

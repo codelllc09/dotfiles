@@ -38,7 +38,7 @@ local M = {}
 local STATE = {}
 
 -- 标题程序名缓存：[pane_id(number)] = agent名 或 前景进程 basename
--- （scan 每秒对全量 pane 刷新；供 .wezterm.lua 的「TABn APPNAME」取名——
+-- （scan 每秒对全量 pane 刷新；供 wezterm.lua 的「TABn APPNAME」取名——
 --   套壳启动（npm run claude）时也能出 claude 而非 node）
 local APPS = {}
 
@@ -474,11 +474,11 @@ local function scan()
     -- 徽章要等 ~30s 的自然重繪）。手段（並用，皆不可見）：
     --   ① MuxTab:set_title 交替空格——tab_title 是 formatter 的直接輸入，
     --      必然觸發重評（顯示層用 pane title，不受污染）
-    --   ② set_right_status 交替空格——雙保險
+    --   （② set_right_status 交替空格已退役——右狀態欄讓給 workspace_display 顯示
+    --     工作區名，2026-09；set_title 單手段實測足夠觸發重繪）
     flip = not flip
     pcall(function()
       for _, w in ipairs(wezterm.mux.all_windows()) do
-        pcall(function() w:gui_window():set_right_status(flip and ' ' or '  ') end)
         local ok_tabs, tabs = pcall(function() return w:tabs() end)
         if ok_tabs and type(tabs) == 'table' then
           for _, t in ipairs(tabs) do
@@ -630,7 +630,7 @@ function M.tab_unread(tab)
   }
 end
 
--- 標題程序名（.wezterm.lua 的「TABn APPNAME」取名，三層兜底）：
+-- 標題程序名（wezterm.lua 的「TABn APPNAME」取名，三層兜底）：
 --   ① STATE agent（JSON 跨 reload 回温，套壳启动已识别）② APPS 每秒缓存
 --   ③ TabInformation.active_pane.foreground_process_name 静态快照
 -- 返回 nil = 三层都拿不到（调用方自回退 '·'）
