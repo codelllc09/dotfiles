@@ -17,7 +17,7 @@
 --      （GUI/connui/…，侧上下文的事件 handler 永不被调用）
 --      → 存活权杖制：arm 时才写 herd_alive；被采纳链自然存活
 --   3. 无事件循环上下文里排的 call_after 永不触发
---      → 由 GUI 高频事件 + dot_for 渲染路径懒启动
+--      → 由 GUI 高频事件 + 渲染路径（tab_dot/tab_unread/app_name）懒启动
 --
 -- v4 拆分：佈局碼（layout_code/layout_glyph/LAYOUT_GLYPH）已拆至 layout.lua；
 --          标题程序名（APPS 每秒缓存 + M.app_name）供 appicon.lua 取名
@@ -547,18 +547,6 @@ end
 
 -- ═══ 对外接口 ═══
 
--- tab 状态点：非 agent pane 返回空表（调用方 ipairs 直接吃掉）
--- 同时兼作启动器：config 重载必触发 tab 重绘 → dot_for → arm
-function M.dot_for(pane_id)
-  arm()
-  local r = STATE[tonumber(pane_id)]
-  if not r then return {} end
-  return {
-    { Foreground = { Color = STATE_COLOR[r.state] or '#6c7086' } },
-    { Text = '● ' },
-  }
-end
-
 -- ═══ 方案A（tab 級聚合）：指示燈與未讀徽章各自獨立 ═══
 -- 指示燈 tab_dot  ：全 tab 最壞狀態（blocked > working > idle）——「有沒有事要我」
 -- 未讀徽章 tab_unread：QQ 式計數（上角標）——你錯過的 →blocked / 跑完了 事件數；
@@ -659,10 +647,6 @@ function M.app_name(tab)
     if type(f) == 'string' and f ~= '' then name = basename(f) end
   end)
   return name
-end
-
-function M.state()
-  return STATE
 end
 
 function M.setup()

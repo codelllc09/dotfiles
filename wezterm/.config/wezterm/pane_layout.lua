@@ -4,7 +4,7 @@
 --
 -- 接口：
 --   M.glyph(tab, panes) → 象形字（'吅'/'日'/'田'…；单格返回 '1'，调用方不显示）
---   M.code(tab, panes)  → 裸码（如 '1V(1H1)V1'，无象形字时回退显示这个）
+--   （裸码导出 M.code 已随 2026-09-09 死代码清理移除：零调用方；glyph 内部即含回退）
 -- 渲染约定：主配置 format-tab-title 里 N≥2 才显示，暗灰，药丸外
 local wezterm = require 'wezterm'
 local M = {}

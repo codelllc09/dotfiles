@@ -13,11 +13,12 @@
 --   · Esc 退出(2026-09-09 拆除刪除流:要刪工作區進去手動關 tab)
 --
 -- 结果消费（零状态设计——2026-09 悬案调查的最终形态）：
---   TUI 把结果写进 /tmp/ws-pick-<window_id>.result（路径按窗口 id 确定性生成，
---   配置侧【永不写入】该路径→无 io 写影子），然后 OSC 推标题（rime 同款机制，
---   必然唤醒配置侧）+ 退出（pane 关闭→布局变化同样唤醒）。
---   配置侧每次 update-right-status 直查该文件：有结果→消费。不定时器、
+--   TUI 把动作编码进 pane 标题（OSC2 推 'ws-pick:<op>:<name>'，rime 同款机制，
+--   必然唤醒配置侧）并保活 1.2s + 退出（pane 关闭→布局变化同样唤醒）。
+--   配置侧每次 update-right-status 扫描 mux pane 标题：有结果→消费。不定时器、
 --   不依赖 GLOBAL——重载（rime 切 IME 每次全量重求值）杀不死任何东西。
+--   （result 文件通道已於 2026-09-09 死代码清理退役：本 build 配置 Lua 看不见
+--   子进程新建的 /tmp 文件，该文件从无读者）
 --
 -- ═══ 2026-09 悬案调查结论（全部实验证实）═══
 -- ① perform_action(overlay{action=action_callback}) 嵌套=死路：运行时注册的回调
@@ -29,8 +30,8 @@
 -- ⑤ /tmp 下的配置文件会被过度监视（勿用）；SplitPane/pane:split 未知字段静默忽略
 -- ⑥ 删除工作区无 mux 原语：枚举 pane → os.execute 后台异步 cli kill-pane
 --    （同步 cli 死锁 GUI）——已於 2026-09-09 整體拆除(守則⑨:禁異步 kill-pane)
--- ⑦ 配置 Lua 对自己写过的 /tmp 路径存在读影子（write-shadow）——配置永不写
---    结果文件，TUI（真实进程）写真实文件，配置直读真实内容
+-- ⑦ 配置 Lua 对自己写过的 /tmp 路径存在读影子（write-shadow）——且看不见子进程
+--    新建的 /tmp 文件。文件通道因此整体废弃（2026-09-09），本条仅作历史存档
 -- 诊断：/tmp/ws-debug.log
 local wezterm = require 'wezterm'
 local M = {}
@@ -205,7 +206,6 @@ local function open_drawer(window, pane)
   local now = os.time()
   if now - (wezterm.GLOBAL.ws_drawer_at or 0) < 1 then return end
   wezterm.GLOBAL.ws_drawer_at = now
-  local res = '/tmp/ws-pick.result' -- 仅作 TUI 侧备份（配置不读；文件通道在本 build 不可见）
   local cur = current_workspace(window) or 'default'
   -- 统计各工作区 tab 数与 pane 数（[ws] = {tabs=n, panes=m}）
   local per_ws = {}
@@ -222,7 +222,7 @@ local function open_drawer(window, pane)
       end
     end
   end)
-  local args = { PICKER_LUA, PICKER_SCRIPT, res, cur }
+  local args = { PICKER_LUA, PICKER_SCRIPT, cur }
   for _, n in ipairs(ordered_names()) do
     local st = per_ws[n] or { tabs = 1, panes = 1 }
     args[#args + 1] = n .. ':' .. tostring(st.tabs) .. ':' .. tostring(st.panes)
@@ -267,7 +267,6 @@ wezterm.on('window-focus-changed', function(window, pane)
 end)
 
 M.key_tables = {}
-M._internal = { ordered_names = ordered_names, open_drawer = open_drawer }
 
 -- （2026-09-09 日志节流）不再记 loaded 行：每次求值每上下文一条，纯噪音
 return M

@@ -3,17 +3,16 @@
 -- 由 workspace.lua 经 pane:split 拉起：
 --   luajit ws-picker.lua <当前工作区> <名字:pane数> ...
 -- 清单快照由配置侧传参（零子进程，启动即绘，~3ms 级）。自绘圆角边框面板。
--- 结果写唯一命名的 result 文件（{"op":"goto"|"new"|"del"|"cancel","name":...}）后退出，
--- pane 随进程消亡自动关闭；配置侧轮询该文件执行跳转/新建/删除。
+-- 结果经 OSC2 编码进 pane 标题（ws-pick:<op>:<name>）并保活 1.2s，pane 随进程
+-- 消亡自动关闭；配置侧扫标题派发。（result 文件通道已於 2026-09-09 死代码
+-- 清理退役：本 build 配置 Lua 看不见子进程新建的 /tmp 文件，该文件从无读者）
 -- 键位：字符过滤（完整行编辑：←→/Home/End/Ctrl+A·E·B·F·D，Backspace/Del 删字符）
 --       · Tab 补全 · ↑↓/Ctrl+P·N 移动 · Enter 跳转（无匹配=新建）
 --       · Ctrl+D 行尾=删除选中工作区（default 拒删；y 确认 n 取消）· Esc 即退
 -- 注意：参与宽度对齐/填充的行一律 ASCII（边框字符不参与填充），
 --       避免模糊宽字符（●▸▏等）在 wezterm 下 1/2 列歧义导致边框错位。
--- 结果路径由配置侧生成（唯一名，经 argv[1] 传入）：配置侧对该路径零写入，
--- 规避本 build 配置 io 写影子（实测：配置写过同路径后读到的永远是自己的空影子）
-local RESULT = arg[1]
-local CUR = arg[2] or 'default'
+-- （历史注：result 文件通道曾由 argv[1] 传入路径；io 写影子教训见 workspace.lua ⑦）
+local CUR = arg[1] or 'default'
 
 -- ── 数据：argv 传入 name:tabs:panes 三元组 ──
 local names, counts, tabs_n = {}, {}, {}
@@ -85,7 +84,7 @@ end
 -- ── Catppuccin Mocha ──
 local C = {
   dim = '\27[38;2;88;91;112m', text = '\27[38;2;205;214;244m',
-  accent = '\27[38;2;180;190;252m', green = '\27[38;2;166;228;161m',
+  accent = '\27[38;2;180;190;252m',
   red = '\27[38;2;243;139;168m', selbg = '\27[48;2;69;71;90m',
   bold = '\27[1m', reset = '\27[0m',
 }
@@ -161,16 +160,7 @@ local function complete()
   refresh()
 end
 
-local function jstr(s)
-  return '"' .. s:gsub('\\', '\\\\'):gsub('"', '\\"') .. '"'
-end
-
 local function finish(op, name)
-  local f = io.open(RESULT, 'w')
-  if f then
-    f:write('{"op":"', op, '","name":', name and jstr(name) or 'null', '}')
-    f:close()
-  end
   -- 动作编码进 pane 标题（OSC2）：本 build 配置 Lua 看不见 pane 子进程新建的
   -- /tmp 文件（实测 No such file），但标题经 mux 可靠流动（rime 同款机制）。
   -- 配置侧 update-right-status 扫描本标题完成派发。
