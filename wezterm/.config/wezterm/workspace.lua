@@ -177,6 +177,12 @@ end
 -- ═══ 主键：Ctrl+Shift+O 拉起抽屉 ═══
 -- 工作区清单快照经 argv 传入（名字:pane数 对）→ TUI 零子进程、启动即绘、数据新鲜
 local function open_drawer(window, pane)
+  -- 防重入（2026-09-09 P0）：key repeat 連發會以 ~30cps 疊出幾十個 top_level
+  -- 抽屜 pane（pane churn＋arm_poll 鏈混戰，守則⑨同族）。GLOBAL 純量跨
+  -- reload 存活；正常流（Esc 掉再重開）間隔遠超 1s，不受影響。
+  local now = os.time()
+  if now - (wezterm.GLOBAL.ws_drawer_at or 0) < 1 then return end
+  wezterm.GLOBAL.ws_drawer_at = now
   local res = '/tmp/ws-pick.result' -- 仅作 TUI 侧备份（配置不读；文件通道在本 build 不可见）
   local cur = current_workspace(window) or 'default'
   -- 统计各工作区 tab 数与 pane 数（[ws] = {tabs=n, panes=m}）

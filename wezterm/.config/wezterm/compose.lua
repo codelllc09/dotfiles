@@ -26,6 +26,12 @@ M.keys = {
   {
     key = 'I', mods = 'CTRL|SHIFT', -- 可按喜好改鍵
     action = wezterm.action_callback(function(window, pane)
+      -- 防重入（2026-09-09 P0）：key repeat 連發會以 ~30cps 每秒開幾十個
+      -- composer 窗口（窗口創建風暴＋焦點搶奪，守則⑨同族）。GLOBAL 純量跨
+      -- reload 存活；正常流（空文件放棄後再按）間隔遠超 1s，不受影響。
+      local now = os.time()
+      if now - (wezterm.GLOBAL.compose_at or 0) < 1 then return end
+      wezterm.GLOBAL.compose_at = now
       window:perform_action(wezterm.action.SpawnCommandInNewWindow {
         args = { 'bash', COMPOSER, tostring(pane:pane_id()) },
         set_environment_variables = {

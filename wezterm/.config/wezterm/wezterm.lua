@@ -279,6 +279,13 @@ config.keys = {
   -- 訪問不存在變體直接抛錯→整份配置重載失敗回退默認——親測踩坑），
   -- 但 Pane 對象有 move_to_new_window() 方法，走 action_callback。
   { key = 'F8', mods = 'NONE', action = wezterm.action_callback(function(window, pane)
+    -- 防重入（2026-09-09 P0）：key repeat 連發會以 ~30cps 反覆搬窗＝窗口 churn 風暴
+    -- （守則⑨ panic 食譜，且 F8 常在渲染狀態異常時按，疊加風險）。GLOBAL 純量
+    -- 跨 reload 存活（rime 切 IME 即重求值，local 狀態靠不住）；os.time 秒級粒度，
+    -- 實際間隔 2-3s，救援場景可接受。
+    local now = os.time()
+    if now - (wezterm.GLOBAL.f8_at or 0) < 2 then return end
+    wezterm.GLOBAL.f8_at = now
     pcall(function() pane:move_to_new_window() end)
   end) },
   -- （分流實驗 F7 已於定案後移除：證實症狀與鍵位無關，是渲染層殭屍；F8 換窗終結）
