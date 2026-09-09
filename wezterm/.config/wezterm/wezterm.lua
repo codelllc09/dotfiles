@@ -47,6 +47,19 @@ config.window_padding = { left = 6, right = 6, top = 4, bottom = 4 }
 config.hide_tab_bar_if_only_one_tab = false -- 状态栏常驻
 config.use_fancy_tab_bar = false           -- 复古细条（一行高的状态行，非花式标签栏）
 config.tab_bar_at_bottom = true           -- 放底部，紧邻打字区
+
+-- ── 窗口標題欄嘗試退役（2026-09-09，實測否決）──
+-- 背景懸案：GNOME/Mutter 不給 Wayland 原生窗口 SSD；wezterm 默認值
+-- 'TITLE | RESIZE' 會「請求 SSD → 藏自帶 CSD → 不檢查是否兌現」→ 無標題欄
+-- （上游 PR #7360 修此邏輯，至今未合）。實渗 window_decorations='TITLE'
+-- 可觸發自繪 CSD，但本 nightly 的 CSD 是半成品：自帶 ConceptFrame 被
+-- 注釋成死代碼（wayland/mod.rs '// mod frame;'，window_frame 配色無效），
+-- 實際畫框的是 SCTK 0.19 FallbackFrame，症狀：①底部 tab 欄被裁出可視區
+-- （幾何 bug，#6578/#5332 家族）②關閉鍵無反應（默認 AlwaysPrompt 走 confirm
+-- 覆蓋層，而覆蓋層組件家族本 nightly 半滅）③最小化失效（set_minimized
+-- Mutter 不理）④唯 Maximize 活（無依賴路徑）。窗口管理改走 GNOME 組合鍵：
+-- Alt+F4 關 / Super+H 最小化 / Super+↑↓ 最大化平鋪。等 #7360+ConceptFrame
+-- 復活後可重試。
 config.warn_about_missing_glyphs = false  -- 字形告警不弹窗（渲染正常时的误报）
 config.status_update_interval = 250       -- Rime 状态兜底刷新；单位毫秒
 
