@@ -13,7 +13,7 @@
 | 發行版 | Fedora 44 (Forty Four)，內核 6.19.6-300.fc44 |
 | 桌面 | GNOME Shell 50.4 · Wayland（mutter） |
 | 終端 | wezterm **20260901 nightly**（非 distro 稳定版，坑位记录见 agent_monitor.lua 档头） |
-| Bash 行編輯器 | ble.sh 0.4.0-devel4（安裝於 `~/.local/share/blesh`） |
+| Bash 行編輯器 | ble.sh 0.4 nightly（由 `install.sh` 安裝至 XDG data 目錄） |
 | 編輯器 | GNU Emacs 30.2（原生 package.el + use-package 模組化配置） |
 | 輸入法 | ibus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
 | 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底 |
@@ -89,15 +89,17 @@ Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；�
 将 `~/.bash_history` 一次性迁到 `${XDG_STATE_HOME:-~/.local/state}/bash/history`，
 不会把历史提交进仓库。
 
-ble.sh 的程式檔屬於外部依賴，不進 dotfiles；新機器需另行安裝至
-`~/.local/share/blesh`。未安裝時 `line-editor.bash` 會靜默跳過，fzf 則回退至
-Fedora 提供的 Readline 快捷鍵。
+ble.sh 的程式檔屬於外部依賴，不進 dotfiles；`install.sh` 會在尚未安裝時從
+官方 nightly release 下載至 `${XDG_DATA_HOME:-~/.local/share}/blesh`，重跑時保留
+既有安裝。下載需要 `curl`、`tar` 與 `xz`。fzf、zoxide、Starship 仍由系統或
+各自安裝器管理；缺少時部署腳本會提示，對應 Bash 模組則靜默跳過。
 
 ## 日常
 
 - **編輯**：直接改 live 路徑或倉庫路徑都一樣（同一個檔案），改完即生效
 - **提交**：`cd ~/dotfiles && git add -A && git commit`
-- **新機器（Linux）**：`git clone … ~/dotfiles && ~/dotfiles/install.sh`
+- **新機器（Linux）**：安裝 `curl`、`tar`、`xz` 後，執行
+  `git clone … ~/dotfiles && ~/dotfiles/install.sh`；腳本會部署連結並安裝 ble.sh
 - **新機器（Windows）**：
   ```powershell
   git clone <repo-url> $env:USERPROFILE\dotfiles

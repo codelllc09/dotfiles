@@ -3,8 +3,62 @@
 # 新增包 = 建同名目录、按真实路径摆放文件、重跑本脚本。
 # 保护规则：目标处若已存在"真实文件"（非 symlink）则跳过并提示，
 # 先手动 mv 进包目录再重跑。
+# 需要手動安裝 curl tar xz fzf zoxide，例如在federa則執行`sudo install ...`
+
 set -euo pipefail
 cd "$(dirname "$0")"
+
+blesh_tmp_dir=
+cleanup_blesh_tmp() {
+  if [ -n "$blesh_tmp_dir" ] && [ -d "$blesh_tmp_dir" ]; then
+    rm -rf -- "$blesh_tmp_dir"
+  fi
+}
+trap cleanup_blesh_tmp EXIT
+
+install_blesh() {
+  local blesh_data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+  local blesh_file="$blesh_data_home/blesh/ble.sh"
+  local required_command
+
+  if [ -r "$blesh_file" ]; then
+    echo "保留已安装的 ble.sh: $blesh_file"
+    return 0
+  fi
+
+  for required_command in curl tar xz; do
+    if ! command -v "$required_command" >/dev/null 2>&1; then
+      echo "无法安装 ble.sh：缺少命令 $required_command" >&2
+      return 1
+    fi
+  done
+
+  echo "下载并安装 ble.sh 到 $blesh_data_home/blesh"
+  blesh_tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-blesh.XXXXXX")"
+  curl --fail --location --retry 3 \
+    --output "$blesh_tmp_dir/ble-nightly.tar.xz" \
+    https://github.com/akinomyoga/ble.sh/releases/download/nightly/ble-nightly.tar.xz
+  tar -xJf "$blesh_tmp_dir/ble-nightly.tar.xz" -C "$blesh_tmp_dir"
+  bash "$blesh_tmp_dir/ble-nightly/ble.sh" --install "$blesh_data_home"
+
+  if [ ! -r "$blesh_file" ]; then
+    echo "ble.sh 安装完成，但未找到预期文件: $blesh_file" >&2
+    return 1
+  fi
+  echo "安装 ble.sh: $blesh_file"
+
+  cleanup_blesh_tmp
+  blesh_tmp_dir=
+}
+
+report_optional_shell_tools() {
+  local tool
+  for tool in fzf zoxide starship; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      echo "提示：未安装 $tool；相关 Bash 功能会静默跳过。" >&2
+    fi
+  done
+}
 
 # 2026-09：WezTerm 主配置已迁到 XDG 路径。仅清理由本仓库旧布局
 # 创建的 ~/.wezterm.lua 链接；真实文件或其他来源的链接一律不碰。
@@ -45,3 +99,6 @@ for pkg in */; do
     fi
   done
 done
+
+install_blesh
+report_optional_shell_tools
