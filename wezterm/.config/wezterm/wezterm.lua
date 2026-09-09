@@ -244,18 +244,68 @@ local enter_copy_mode_clean = wezterm.action_callback(function(window, pane)
   local kt = t()
   clog('X pressed, table=' .. tostring(kt))
   if kt == 'search_mode' then
-    -- 只關層：關完渲染拆除自然落地，沒有後續動作和它賽跑
+    -- 只關層 + 清詞（2026-09-09 原地進入補丁）：舊詞殘留是下次進層滾底的真兇，
+    -- 關層前先清（與 Q 的 exit_only 同構：清詞→關層，Close 必須墊尾）
+    window:perform_action(wezterm.action.CopyMode 'ClearPattern', pane)
     window:perform_action(wezterm.action.CopyMode 'Close', pane)
-    clog('  search layer open → closed it only, press X again to enter')
+    clog('  search layer open → cleared pattern + closed it only, press X again to enter')
     return
   end
   window:perform_action(wezterm.action.ClearSelection, pane)
   window:perform_action(wezterm.action.ActivateCopyMode, pane)
-  clog('  entered, table=' .. tostring(t()))
+  if kt == nil then
+    -- 原地進入的關鍵（2026-09-09）：本 build 進複製模式視口本就繼承（with_pane 取
+    -- get_viewport），滾底真兇是按 tab 記憶的舊搜索詞（SAVED_PATTERN）被 with_pane
+    -- 自動復活 → 立刻從最底端異步搜索 → activate_match_number(0) 跳最底匹配並拽走
+    -- 視口。進入後同步清詞即可破局：在途搜索結果回來時因 pattern 不匹配被
+    -- processed_search_chunk 守衛丟棄。順序不可變：overlay 存在才能路由 CopyMode 動作。
+    -- 副作用：常態 Ctrl+Shift+X 進入後 `/` 不再預填舊詞（與「Q 清詞」哲學一致；
+    -- 複製模式會話內 `/` 仍保留）
+    window:perform_action(wezterm.action.CopyMode 'ClearPattern', pane)
+    -- 光標投位（2026-09-09 v2）：with_pane 把光標初始化成 pane 真實光標（在底部
+    -- 提示符處）——視口雖留住了，但按任何移動鍵都會被
+    -- adjust_viewport_for_cursor_position 拽回光標處 (= 滾底)。補一刀
+    -- MoveToViewportMiddle：以 overlay 保存的視口為基準把光標投到視口中間
+    -- （select_to_cursor_pos 在 start=nil 時只移光標不啟動選區；中間位置與
+    -- 上下緣均留 ≥5 行餘量，不會反過來調整視口）。等效進層即按了一次 `M`
+    window:perform_action(wezterm.action.CopyMode 'MoveToViewportMiddle', pane)
+  end
+  -- kt == 'copy_mode'：冪等重進不清詞（`/` 會話內舊詞保留；此路徑 apply_params
+  -- 不觸發搜索，無滾底風險）
+  clog('  entered, table=' .. tostring(t()) .. ', pattern_cleared=' .. tostring(kt == nil))
+end)
+
+-- 搜索模式進入器（2026-09-09 原地進入）：Ctrl+Shift+F 出廠默認是 Search
+-- 'CurrentSelectionOrEmptyString'——無選區時詞空，同樣復活 SAVED_PATTERN 舊詞
+-- → 跳最底匹配（= 進搜索態滾底）。接管為三分支：
+--   常態     → ClearSelection + Search 空詞 + 立刻 ClearPattern + 光標投位
+--              MoveToViewportMiddle（詞空欄、視口原地、光標在視口中間；打字後
+--              350ms 跳到匹配是增量搜索本義，不受影響）
+--   複製模式 → EditPattern（等價 `/`：原地、保留會話內舊詞）
+--   搜索態   → 冪等 Nop
+local enter_search_clean = wezterm.action_callback(function(window, pane)
+  local okt, kt = pcall(function() return window:active_key_table() end)
+  if not okt then return end
+  if kt == 'search_mode' then return end
+  if kt == 'copy_mode' then
+    window:perform_action(wezterm.action.CopyMode 'EditPattern', pane)
+    return
+  end
+  window:perform_action(wezterm.action.ClearSelection, pane)
+  window:perform_action(wezterm.action.Search { CaseInSensitiveString = '' }, pane)
+  window:perform_action(wezterm.action.CopyMode 'ClearPattern', pane)
+  -- 光標投位（同 Ctrl+Shift+X 進入器）：搜索態直接 Esc 擺渡回複製模式時，光標
+  -- 已在視口中間，不會一按移動鍵就滾底
+  window:perform_action(wezterm.action.CopyMode 'MoveToViewportMiddle', pane)
 end)
 
 config.keys = {
-  -- 搜索回滚缓冲区：唯一入口 Ctrl+Shift+F（WezTerm 出厂默认，无需自绑）
+  -- 搜索回滚缓冲区：唯一入口 Ctrl+Shift+F——2026-09-09 起接管为 enter_search_clean
+  -- （原地进入：出廠默認會復活按 tab 記憶的舊搜索詞並跳最底匹配；機制見上方註釋）。
+  -- 邏輯鍵+物理鍵雙綁（規則⑦，大小寫歸一坑同 Ctrl+Shift+X 進入器）
+  { key = 'F', mods = 'CTRL|SHIFT', action = enter_search_clean },
+  { key = 'phys:F', mods = 'CTRL|SHIFT', action = enter_search_clean },
+  { key = 'phys:f', mods = 'CTRL|SHIFT', action = enter_search_clean },
   -- 简繁切换已移至 Rime 的 Super+F；释放多余的默认搜索键：
   { key = 'f', mods = 'SUPER', action = wezterm.action.DisableDefaultAssignment }, -- Super+F 让给 Rime 简繁切换
   { key = 'f', mods = 'CTRL', action = wezterm.action.DisableDefaultAssignment },  -- Ctrl+F 放行给终端内程序
