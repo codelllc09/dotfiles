@@ -13,6 +13,7 @@
 | 發行版 | Fedora 44 (Forty Four)，內核 6.19.6-300.fc44 |
 | 桌面 | GNOME Shell 50.4 · Wayland（mutter） |
 | 終端 | wezterm **20260901 nightly**（非 distro 稳定版，坑位记录见 agent_monitor.lua 档头） |
+| Bash 行編輯器 | ble.sh 0.4.0-devel4（安裝於 `~/.local/share/blesh`） |
 | 編輯器 | GNU Emacs 30.2（原生 package.el + use-package 模組化配置） |
 | 輸入法 | ibus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
 | 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底 |
@@ -48,9 +49,13 @@ bash/
   .bash_profile                       → ~/.bash_profile（Bash 固定的登录入口）
   .bashrc                             → ~/.bashrc（薄入口，加载 XDG 模块）
   .config/bash/env.bash               → PATH 与环境变量
+  .config/bash/history.bash           → XDG 命令历史路径
   .config/bash/aliases.bash           → 个人 alias
-  .config/bash/interactive.bash       → 历史路径、fzf 与交互扩展
+  .config/bash/navigation.bash        → zoxide 目录导航
+  .config/bash/fuzzy.bash             → fzf 快捷键后备配置
+  .config/bash/line-editor.bash       → ble.sh detached 预加载
   .config/bash/prompt.bash            → Starship 提示符
+  .config/blesh/init.sh               → ble.sh 的 fzf 与 bash-preexec 相容整合
 
 emacs/
   .emacs.d/init.el                    → ~/.emacs.d/init.el（啟動、套件清單、模組載入）
@@ -83,6 +88,10 @@ Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；�
 位于 `~/.config/bash/`。命令历史属于 state，部署脚本会在目标尚不存在时
 将 `~/.bash_history` 一次性迁到 `${XDG_STATE_HOME:-~/.local/state}/bash/history`，
 不会把历史提交进仓库。
+
+ble.sh 的程式檔屬於外部依賴，不進 dotfiles；新機器需另行安裝至
+`~/.local/share/blesh`。未安裝時 `line-editor.bash` 會靜默跳過，fzf 則回退至
+Fedora 提供的 Readline 快捷鍵。
 
 ## 日常
 
