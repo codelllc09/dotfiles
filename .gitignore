@@ -5,3 +5,23 @@
 *.userdb/
 *.userdb
 installation.yaml
+
+# Emacs 只收配置；下載、編譯、狀態與機器專屬輸出不入庫
+emacs/.emacs.d/custom.el
+emacs/.emacs.d/elpa/
+emacs/.emacs.d/eln-cache/
+emacs/.emacs.d/tree-sitter/
+emacs/.emacs.d/debug-adapters/
+emacs/.emacs.d/vendor/
+emacs/.emacs.d/backups/
+emacs/.emacs.d/auto-save-list/
+emacs/.emacs.d/auto-saves/
+emacs/.emacs.d/state/
+emacs/.emacs.d/url/
+emacs/.emacs.d/history
+emacs/.emacs.d/recentf
+emacs/.emacs.d/places
+emacs/.emacs.d/tools/node/node_modules/
+emacs/.emacs.d/tools/python/
+emacs/.emacs.d/tools/lua-ls/
+emacs/.emacs.d/tools/*.tar.gz

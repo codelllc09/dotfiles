@@ -1,0 +1,9 @@
+# -*- mode: snippet -*-
+# name: React function component
+# key: fc
+# --
+export function ${1:Component}() {
+  return (
+    <div>$0</div>
+  );
+}

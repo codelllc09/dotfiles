@@ -13,6 +13,7 @@
 | 發行版 | Fedora 44 (Forty Four)，內核 6.19.6-300.fc44 |
 | 桌面 | GNOME Shell 50.4 · Wayland（mutter） |
 | 終端 | wezterm **20260901 nightly**（非 distro 稳定版，坑位记录见 agent_monitor.lua 档头） |
+| 編輯器 | GNU Emacs 30.2（原生 package.el + use-package 模組化配置） |
 | 輸入法 | ibus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
 | 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底 |
 
@@ -34,12 +35,32 @@
 
 ```
 wezterm/
-  .wezterm.lua                        → ~/.wezterm.lua（本 build 不認 XDG 路徑；主配置：組裝+鍵位）
+  .config/wezterm/wezterm.lua         → ~/.config/wezterm/wezterm.lua（XDG 主配置：組裝+鍵位）
   .config/wezterm/agent_monitor.lua   → coding agent 狀態監視（前 herd.lua；運行時路徑仍 herd- 前綴）
   .config/wezterm/pane_layout.lua     → 窗格分屏佈局碼（幾何→唯一碼→象形字）
   .config/wezterm/app_icon.lua        → TABn 程序圖標（APP_ICON 表 + 三層歸一化查表）
   .config/wezterm/rime.lua            → Rime 聯動（徽章/游標色/IME 自癒）
   .config/wezterm/quick_select.lua    → QuickSelect 模式表 + DIY 掃描選擇器
+  .config/wezterm/compose.lua         → 中文組字緩衝窗鍵位與啟動邏輯
+  .config/wezterm/composer.sh         → 中文組字緩衝窗編輯與回填腳本
+
+bash/
+  .bash_profile                       → ~/.bash_profile（Bash 固定的登录入口）
+  .bashrc                             → ~/.bashrc（薄入口，加载 XDG 模块）
+  .config/bash/env.bash               → PATH 与环境变量
+  .config/bash/aliases.bash           → 个人 alias
+  .config/bash/interactive.bash       → 历史路径、fzf 与交互扩展
+  .config/bash/prompt.bash            → Starship 提示符
+
+emacs/
+  .emacs.d/init.el                    → ~/.emacs.d/init.el（啟動、套件清單、模組載入）
+  .emacs.d/lisp/init-minibuffer.el    → minibuffer 補全、搜尋與候選操作
+  .emacs.d/lisp/init-editing.el       → 一般編輯、buffer 補全、Markdown、PDF
+  .emacs.d/lisp/init-ui.el            → Tab Line、工作區、主題、字體與圖標
+  .emacs.d/lisp/init-project.el       → project、Dired、Magit、會話與 IDE 面板
+  .emacs.d/lisp/init-programming.el   → Tree-sitter、Eglot、格式化、測試與除錯
+  .emacs.d/snippets/                  → 個人 YASnippet 模板
+  .emacs.d/tools/                     → Node/Python 工具的可重建版本清單
 ```
 
 v4 模塊化（2026-09-04）：原 476 行單文件按功能拆成上述模塊（教訓：單文件
@@ -49,6 +70,19 @@ v4 模塊化（2026-09-04）：原 476 行單文件按功能拆成上述模塊�
 ```bash
 WEZTERM_UNIX_SOCKET=/tmp/chk.sock WEZTERM_LOG=warn wezterm start -e true
 ```
+
+Emacs 配置按主責拆分，每個套件只由一個模組擁有；套件下載、原生編譯、
+Tree-sitter grammar、工具虛擬環境及會話資料仍留在 `~/.emacs.d/`，不進倉庫。
+修改後可用以下命令驗證完整啟動：
+
+```bash
+emacs --batch -Q --load ~/.emacs.d/init.el --eval '(message "Emacs config OK")'
+```
+
+Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；实际配置
+位于 `~/.config/bash/`。命令历史属于 state，部署脚本会在目标尚不存在时
+将 `~/.bash_history` 一次性迁到 `${XDG_STATE_HOME:-~/.local/state}/bash/history`，
+不会把历史提交进仓库。
 
 ## 日常
 

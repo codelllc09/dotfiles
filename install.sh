@@ -5,6 +5,31 @@
 # 先手动 mv 进包目录再重跑。
 set -euo pipefail
 cd "$(dirname "$0")"
+
+# 2026-09：WezTerm 主配置已迁到 XDG 路径。仅清理由本仓库旧布局
+# 创建的 ~/.wezterm.lua 链接；真实文件或其他来源的链接一律不碰。
+repo_root="$(pwd)"
+legacy_wezterm="$HOME/.wezterm.lua"
+legacy_wezterm_target="$repo_root/wezterm/.wezterm.lua"
+if [ -L "$legacy_wezterm" ] && [ "$(readlink "$legacy_wezterm")" = "$legacy_wezterm_target" ]; then
+  unlink "$legacy_wezterm"
+  echo "移除旧链接: $legacy_wezterm"
+fi
+
+# Bash 历史是 state，不进入 dotfiles。首次部署时把传统路径迁到
+# XDG_STATE_HOME；若两边都存在则不自动合并，避免覆盖历史。
+bash_state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+bash_state_dir="$bash_state_home/bash"
+legacy_bash_history="$HOME/.bash_history"
+xdg_bash_history="$bash_state_dir/history"
+mkdir -p "$bash_state_dir"
+if [ -f "$legacy_bash_history" ] && [ ! -e "$xdg_bash_history" ]; then
+  mv "$legacy_bash_history" "$xdg_bash_history"
+  echo "迁移 Bash 历史: $legacy_bash_history -> $xdg_bash_history"
+elif [ -f "$legacy_bash_history" ] && [ -e "$xdg_bash_history" ]; then
+  echo "保留旧 Bash 历史（XDG 目标已存在，请手动合并）: $legacy_bash_history"
+fi
+
 for pkg in */; do
   pkg="${pkg%/}"
   [ -d "$pkg" ] || continue

@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "prettier": "3.9.6",
+    "pyright": "1.1.413",
+    "tsx": "4.23.13",
+    "typescript": "6.0.3",
+    "typescript-language-server": "6.0.0"
+  }
+}

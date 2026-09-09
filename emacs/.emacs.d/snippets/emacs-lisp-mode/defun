@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: Emacs Lisp function
+# key: defun
+# --
+(defun ${1:name} (${2:args})
+  "${3:Documentation.}"
+  $0)

@@ -1,0 +1,8 @@
+# -*- mode: snippet -*-
+# name: C main function
+# key: main
+# --
+int main(void) {
+    $0
+    return 0;
+}

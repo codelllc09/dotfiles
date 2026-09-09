@@ -1,0 +1,6 @@
+# -*- mode: snippet -*-
+# name: Python main entry point
+# key: main
+# --
+if __name__ == "__main__":
+    $0

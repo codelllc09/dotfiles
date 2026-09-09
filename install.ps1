@@ -13,6 +13,24 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $MyInvocation.MyCommand.Path
 $homeDir = $env:USERPROFILE
 
+# Bash 历史是 state，不进入 dotfiles。若用户通过 Git Bash 使用本仓库，
+# 首次部署时迁到 XDG state 目录；已有目标绝不覆盖。
+$bashStateHome = if ($env:XDG_STATE_HOME) {
+    $env:XDG_STATE_HOME
+} else {
+    Join-Path $homeDir '.local/state'
+}
+$bashStateDir = Join-Path $bashStateHome 'bash'
+$legacyBashHistory = Join-Path $homeDir '.bash_history'
+$xdgBashHistory = Join-Path $bashStateDir 'history'
+if ((Test-Path -LiteralPath $legacyBashHistory) -and -not (Test-Path -LiteralPath $xdgBashHistory)) {
+    New-Item -ItemType Directory -Path $bashStateDir -Force | Out-Null
+    Move-Item -LiteralPath $legacyBashHistory -Destination $xdgBashHistory
+    Write-Host "迁移 Bash 历史: $legacyBashHistory -> $xdgBashHistory"
+} elseif ((Test-Path -LiteralPath $legacyBashHistory) -and (Test-Path -LiteralPath $xdgBashHistory)) {
+    Write-Warning "保留旧 Bash 历史；XDG 目标已存在，请手动合并: $legacyBashHistory"
+}
+
 Get-ChildItem -Path $repo -Directory | Where-Object { $_.Name -ne '.git' } | ForEach-Object {
     $pkg = $_.FullName
     Get-ChildItem -Path $pkg -Recurse -File | ForEach-Object {
