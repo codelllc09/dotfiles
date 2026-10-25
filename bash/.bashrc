@@ -24,3 +24,4 @@ done
 [[ ! ${BLE_VERSION-} ]] || ble-attach
 
 unset bash_config_dir bash_config_file
+
