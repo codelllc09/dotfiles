@@ -98,8 +98,6 @@ Neovim 定位是「文檔查看器 + 輕量編輯器」：render-markdown（==�
 （只爲安裝 json/yaml parser，markdown 系隨 nvim 自帶）。高亮/摺疊用
 0.11+ 內置引擎（`vim.treesitter.start()`），無舊式 setup({highlight})。
 驗證：`nvim --headless +'lua print(type(MiniPick))' +qa` 輸出 table 即配置健全。
-注意：Windows 端 nvim 配置路徑是 `%LOCALAPPDATA%\nvim`，install.ps1 不映射
-此包，真用上 Windows 再補。
 
 Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；实际配置
 位于 `~/.config/bash/`。命令历史属于 state，部署脚本会在目标尚不存在时
@@ -119,13 +117,6 @@ Alt+V/G 依賴它）仍由系統或
 - **提交**：`cd ~/dotfiles && git add -A && git commit`
 - **新機器（Linux）**：安裝 `curl`、`tar`、`xz` 後，執行
   `git clone … ~/dotfiles && ~/dotfiles/install.sh`；腳本會部署連結並安裝 ble.sh
-- **新機器（Windows）**：
-  ```powershell
-  git clone <repo-url> $env:USERPROFILE\dotfiles
-  powershell -ExecutionPolicy Bypass -File $env:USERPROFILE\dotfiles\install.ps1
-  ```
-  注意兩端語義不同：Linux 是 symlink（倉庫即真身），Windows 是複製（改完要
-  commit push，兩端各自 pull 後重跑安裝腳本）
 - **新增工具**：`mkdir rime && mv ~/.config/ibus/rime/* rime/` 之類，
   再跑 `./install.sh`（記得加 .gitignore 排除執行期產物）
 
