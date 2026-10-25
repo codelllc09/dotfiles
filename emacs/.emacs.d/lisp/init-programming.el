@@ -4,6 +4,15 @@
 (require 'eglot)
 (require 'treesit)
 
+;; flymake-ruff calls the Emacs 30 Flymake accessor
+;; `flymake-diagnostic-text' but does not require/declare Flymake in its source,
+;; so native compilation reports a false undefined-function warning.  The
+;; package ships working byte-code; keep it there until upstream adds the
+;; declaration, avoiding a noisy *Warnings* buffer without disabling Ruff.
+(when (boundp 'native-comp-jit-compilation-deny-list)
+  (add-to-list 'native-comp-jit-compilation-deny-list
+               "/flymake-ruff-[^/]+/flymake-ruff\\.el\\'"))
+
 (use-package eglot
   :ensure nil
   :commands (eglot eglot-rename eglot-format-buffer eglot-code-actions)
@@ -19,6 +28,25 @@
          ("C-c ! p" . flymake-show-project-diagnostics)
          ("C-c ! n" . flymake-goto-next-error)
          ("C-c ! b" . flymake-goto-prev-error)))
+
+(defun lcw-python-enable-ruff-diagnostics ()
+  "Enable live Ruff diagnostics when Ruff exists on the current host."
+  ;; With a TRAMP default-directory, REMOTE asks `executable-find' to inspect
+  ;; the remote host rather than accidentally using the bundled local Ruff.
+  (when (executable-find "ruff" t)
+    (flymake-ruff-load)
+    (flymake-mode 1)))
+
+(use-package flymake-ruff
+  :if (locate-library "flymake-ruff")
+  :commands (flymake-ruff-load flymake-ruff-goto-doc)
+  :hook (python-base-mode . lcw-python-enable-ruff-diagnostics)
+  :config
+  (with-eval-after-load 'flymake
+    (keymap-set flymake-diagnostics-buffer-mode-map
+                "M-RET" #'flymake-ruff-goto-doc)
+    (keymap-set flymake-project-diagnostics-mode-map
+                "M-RET" #'flymake-ruff-goto-doc)))
 
 (setq treesit-language-source-alist
       '((c "https://github.com/tree-sitter/tree-sitter-c" "v0.23.4")
@@ -69,6 +97,19 @@
   (setq-local python-shell-interpreter (lcw-python-executable))
   (setq-local eglot-workspace-configuration
               `(:python (:pythonPath ,python-shell-interpreter))))
+
+(defun lcw-org-babel-python-setup ()
+  "Use the project Python interpreter for Org Babel blocks."
+  (setq-local org-babel-python-command (lcw-python-executable)))
+
+(use-package org
+  :ensure nil
+  :hook (org-mode . lcw-org-babel-python-setup)
+  :config
+  (org-babel-do-load-languages
+   'org-babel-load-languages
+   '((emacs-lisp . t)
+     (python . t))))
 
 (defun lcw-select-python (interpreter)
   "Select INTERPRETER for this buffer; reconnect Eglot afterwards."
