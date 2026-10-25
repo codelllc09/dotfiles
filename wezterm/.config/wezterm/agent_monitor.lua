@@ -84,8 +84,12 @@ local MANIFESTS = {
       line_exact = { 'Project trust' } },
     { id = 'blocked_selector', priority = 200, state = 'blocked',
       line_prefix = { '↑↓ navigate' } },
-    { id = 'working_literal', priority = 100, state = 'working',
-      any_contains = { 'Working...' } },
+    -- spinner 消息（1.3.0 interactive-mode.js / status-indicator.js）：
+    --   Working（默认）、Retrying (…、Compacting context / Auto-compacting、
+    --   Summarizing branch——后四者也是 agent 在忙，算 working
+    { id = 'working_spinner', priority = 100, state = 'working',
+      spinner_prefix = { 'Working', 'Retrying (', 'Compacting context',
+        'Auto-compacting', 'Context overflow detected', 'Summarizing branch' } },
   },
   claude = {
     { id = 'blocked_form', priority = 1200, state = 'blocked',
@@ -174,10 +178,36 @@ end
 
 -- 规则引擎：保守（无命中 → idle）
 -- 匹配方式（可叠加，任一命中即真）：
---   line_exact  : 某行去首尾空白后完全相等（pi 标题行等，最抗对话文本冒充）
---   line_prefix : 某行以此前缀开头（selector 提示行）
---   any_contains: 规则区任意子串（最宽松，易被对话文本冒充，慎用）
+--   line_exact   : 某行去首尾空白后完全相等（pi 标题行等，最抗对话文本冒充）
+--   line_prefix   : 某行以此前缀开头（selector 提示行）
+--   spinner_prefix: 某行是「盲文 spinner + 空格 + 此消息前缀」（pi 工作指示器，可嵌边框）
+--   any_contains  : 规则区任意子串（最宽松，易被对话文本冒充，慎用）
 --   not_contains: 任一命中则否决本条
+-- ── spinner 行识别（2026-10-22 修复，验证于 pi 1.3.0）──
+-- 教训：pi 在 2026-09-24/25 之交的更新把默认 spinner 文案从 "Working..." 改成了
+--   "Working"（无省略号，interactive-mode.js defaultWorkingMessage），旧规则
+--   any_contains 'Working...' 从此失配 → 永远 idle → 「运行完成」通知断流月余。
+--   （transitions.jsonl：最后一次 working→idle 2026-09-24 14:09；且 any_contains
+--    宽松匹配还曾被对话文本里的 "Working..." 字样冒充——规则注释早警告过。）
+-- 新锚点：Loader 渲染「盲文 spinner + 空格 + 消息」；默认编辑器把 spinner 嵌入
+--   输入框上边框，整行形如 "── ⠋ Working ─────"。按行首锚定，对话文本几乎不可能
+--   冒充（需要在行首逐字写出盲文字符 + 空格 + 消息）。
+-- 盲文区 U+2800–U+28FF 的 UTF-8 = E2 A0 80 – E2 A3 BF；Lua pattern 字符类按字节
+--   解释、放不进多字节字符，故按字节手工校验。
+local function spinner_prefix_line(line, prefix)
+  local s = line:match('^%s*(.-)%s*$')
+  -- 剥边框嵌入形态的前导横线：'── ⠋ …' 或溢出标签形态 '───⠋ …'
+  -- （'─' 是多字节字符，不能用 s:sub(1,3)=='── ' 这种字节比较）
+  while s:sub(1, 3) == '─' do s = s:sub(4) end
+  s = s:gsub('^%s+', '')
+  local b1, b2 = s:byte(1), s:byte(2)
+  if b1 ~= 0xE2 or b2 < 0xA0 or b2 > 0xA3 then return false end
+  s = s:sub(4)                                   -- 跳过 3 字节盲文 spinner
+  return s:sub(1, 1) == ' ' and s:sub(2, 1 + #prefix) == prefix
+end
+
+-- pi 状态栏遥测：↑366k ↓182k R20M CH99.9% $6.402 27.1%/1.0M (auto)
+
 local function line_trim(s) return (s:gsub('^%s+', ''):gsub('%s+$', '')) end
 
 local function classify(agent, lines)
@@ -204,6 +234,14 @@ local function classify(agent, lines)
         if hit then break end
       end
     end
+    if not hit and r.spinner_prefix then
+      for _, p in ipairs(r.spinner_prefix) do
+        for _, ln in ipairs(lines) do
+          if spinner_prefix_line(ln, p) then hit = true break end
+        end
+        if hit then break end
+      end
+    end
     if not hit and r.any_contains then
       for _, s in ipairs(r.any_contains) do
         if region:find(s, 1, true) then hit = true break end
@@ -219,7 +257,6 @@ local function classify(agent, lines)
   return 'idle', 'default_known_agent_idle_fallback'
 end
 
--- pi 状态栏遥测：↑366k ↓182k R20M CH99.9% $6.402 27.1%/1.0M (auto)
 local function parse_telemetry(foot)
   if not foot then return nil, nil end
   local ctx = foot:match('(%d+%.?%d*)%%/%S+')
@@ -666,6 +703,10 @@ function M.setup()
     arm()
   end)
   wezterm.on('window-focus-changed', function() arm() end)
+  -- 热重载会取消旧链的 pending call_after（无声蒸发，见上教训二），而懒启动
+  -- 依赖的渲染事件可能迟迟不来（用户无操作时 tab 栏不重绘）——挂重载事件
+  -- 立即重启链，消除「改完配置后监视静默死亡」的空窗
+  wezterm.on('window-config-reloaded', function() arm() end)
   wezterm.time.call_after(0.3, arm)
 end
 
