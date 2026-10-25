@@ -1,5 +1,7 @@
 ;;; init-editing.el --- Editing behavior and in-buffer tools -*- lexical-binding: t; -*-
 
+(require 'subr-x)
+
 ;; Keep backups and auto-saves out of source directories.
 (let ((backup-dir (expand-file-name "backups/" user-emacs-directory))
       (autosave-dir (expand-file-name "auto-saves/" user-emacs-directory)))
@@ -22,6 +24,88 @@
       large-file-warning-threshold (* 10 1000 1000))
 (setq-default indent-tabs-mode nil
               tab-width 4)
+
+;; Emacs normally remembers that an edit happened, even when the user types
+;; text and then deletes it again.  Keep a lightweight saved-content baseline
+;; so an exactly restored buffer becomes genuinely unmodified again.
+(defvar-local lcw-saved-content-size nil
+  "Character count of this buffer at its last read or save.")
+
+(defvar-local lcw-saved-content-hash nil
+  "Hash of this buffer's text at its last read or save.")
+
+(defun lcw-buffer-content-hash ()
+  "Return a SHA-256 hash of all text in the current buffer."
+  (save-restriction
+    (widen)
+    (secure-hash 'sha256 (current-buffer) (point-min) (point-max))))
+
+(defun lcw-clear-modified-if-content-restored (&rest _ignored)
+  "Clear the modified flag when text matches the last saved baseline.
+The cheap size test avoids hashing during ordinary insertion and deletion."
+  (when (and buffer-file-name
+             (buffer-modified-p)
+             lcw-saved-content-hash
+             (= (buffer-size) lcw-saved-content-size)
+             (equal (lcw-buffer-content-hash) lcw-saved-content-hash))
+    (set-buffer-modified-p nil)
+    (force-mode-line-update)))
+
+(defun lcw-record-saved-content ()
+  "Record the current file buffer text as its saved baseline."
+  (when buffer-file-name
+    (setq-local lcw-saved-content-size (buffer-size)
+                lcw-saved-content-hash (lcw-buffer-content-hash))))
+
+(defun lcw-enable-content-restore-check ()
+  "Enable saved-content comparison after edits in the current buffer."
+  (add-hook 'after-change-functions
+            #'lcw-clear-modified-if-content-restored nil t))
+
+(defun lcw-disable-content-restore-check ()
+  "Disable saved-content comparison after edits in the current buffer."
+  (remove-hook 'after-change-functions
+               #'lcw-clear-modified-if-content-restored t))
+
+(defun lcw-read-local-file-content-state (file coding)
+  "Return FILE's decoded (SIZE . HASH) using CODING.
+This helper deliberately avoids reading remote files during configuration
+reloads; remote buffers establish their baseline when opened or saved."
+  (when (and file (not (file-remote-p file)) (file-readable-p file))
+    (condition-case nil
+        (let ((coding-system-for-read coding))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (cons (buffer-size) (lcw-buffer-content-hash))))
+      (file-error nil))))
+
+(defun lcw-initialize-saved-content-tracking (&optional buffer)
+  "Install saved-content tracking in BUFFER, including after a reload."
+  (with-current-buffer (or buffer (current-buffer))
+    (when buffer-file-name
+      (cond
+       ((not (buffer-modified-p))
+        (lcw-record-saved-content))
+       ((not (file-remote-p buffer-file-name))
+        (if-let* ((state
+                   (lcw-read-local-file-content-state
+                    buffer-file-name buffer-file-coding-system)))
+            (setq-local lcw-saved-content-size (car state)
+                        lcw-saved-content-hash (cdr state))
+          ;; A newly created, not-yet-saved file has an empty disk baseline.
+          (setq-local lcw-saved-content-size 0
+                      lcw-saved-content-hash (secure-hash 'sha256 "")))
+        (lcw-clear-modified-if-content-restored)))
+      (lcw-enable-content-restore-check))))
+
+(add-hook 'find-file-hook #'lcw-record-saved-content 95)
+(add-hook 'after-save-hook #'lcw-record-saved-content 95)
+(add-hook 'after-revert-hook #'lcw-record-saved-content 95)
+
+;; Reloading this module should fix existing local buffers immediately without
+;; opening a network connection for currently modified TRAMP buffers.
+(dolist (buffer (buffer-list))
+  (lcw-initialize-saved-content-tracking buffer))
 
 (show-paren-mode 1)
 (electric-pair-mode 1)
@@ -113,16 +197,24 @@
               markdown-wiki-link-search-subdirectories nil
               markdown-wiki-link-search-parent-directories nil))
 
+(defun lcw-markdown-pretty ()
+  "Use a more Obsidian-like Markdown display."
+  (visual-line-mode 1)
+  (when (display-images-p)
+    (markdown-display-inline-images)))
+
 (use-package markdown-mode
   :if (locate-library "markdown-mode")
   :mode (("\\.\\(?:md\\|markdown\\)\\'" . gfm-mode))
-  :hook (gfm-mode . lcw-markdown-limit-wiki-search)
+  :hook ((gfm-mode . lcw-markdown-limit-wiki-search)
+         (gfm-mode . lcw-markdown-pretty))
   :custom
   (markdown-fontify-code-blocks-natively t)
   (markdown-enable-wiki-links t)
   (markdown-enable-math t)
-  (markdown-hide-markup nil)
-  (markdown-hide-urls nil)
+  (markdown-hide-markup t)
+  (markdown-hide-urls t)
+  (markdown-header-scaling t)
   :config
   ;; markdown-mode registers a generic .md rule while loading. Keep GFM first.
   (let ((entry '("\\.\\(?:md\\|markdown\\)\\'" . gfm-mode)))
