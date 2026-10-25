@@ -10,22 +10,48 @@
 (require 'use-package)
 (setq use-package-always-ensure nil)
 
+;; Let terminal tools reuse this Emacs instance through `emacsclient'.
+(require 'server)
+(defconst lcw-external-editor-command "emacsclient -t -a \"\""
+  "Editor command exported to terminal tools started by Emacs.")
+(setenv "VISUAL" lcw-external-editor-command)
+(setenv "EDITOR" lcw-external-editor-command)
+
+(defun lcw-start-emacs-server ()
+  "Start the default Emacs server once."
+  (unless (or noninteractive (server-running-p))
+    (server-start)))
+(add-hook 'emacs-startup-hook #'lcw-start-emacs-server)
+(when after-init-time
+  (lcw-start-emacs-server))
+
 ;; dired-subtree contains guarded compatibility calls to optional Dired
 ;; extensions that confuse the native compiler on Emacs 30. Keep this small,
 ;; older package on byte-code so harmless diagnostics do not open *Warnings*.
 (defvar native-comp-jit-compilation-deny-list nil)
 (add-to-list 'native-comp-jit-compilation-deny-list
              "/dired-subtree-[^/]+/dired-subtree\\.el\\'")
-
+;; Agent Shell optionally calls Emacs 31's system-sleep API behind `fboundp'.
+;; Emacs 30 handles that correctly at runtime but its native compiler reports
+;; the guarded calls as undefined.  Keep only the main file on byte-code until
+;; that API exists; the smaller Agent Shell modules can still compile natively.
+(when (< emacs-major-version 31)
+  (add-to-list 'native-comp-jit-compilation-deny-list
+               "/agent-shell\\(?:-[^/]+\\)?/agent-shell\\.el\\'"))
 ;; Local configuration modules and pinned code not distributed through ELPA.
 (add-to-list 'load-path (expand-file-name "lisp" user-emacs-directory))
+(add-to-list 'load-path
+             (expand-file-name "lisp"
+                               (file-name-directory
+                                (file-truename
+                                 (or load-file-name user-init-file)))))
 (add-to-list 'load-path
              (expand-file-name "vendor/markdown-mode" user-emacs-directory))
 
 (defconst lcw-ide-packages
   '(vertico orderless marginalia consult corfu magit dired-subtree vterm dape lua-mode pdf-tools
     autothemer avy embark embark-consult yasnippet cape multiple-cursors
-    paredit vlf)
+    paredit vlf agent-shell flymake-ruff)
   "Packages installed explicitly by `lcw-install-ide-packages'.")
 
 (defconst lcw-theme-packages
@@ -45,7 +71,8 @@
 ;; Keep Customize output separate from the version-controlled configuration.
 (setq custom-file (expand-file-name "custom.el" user-emacs-directory))
 (load custom-file 'noerror 'nomessage)
-(setq package-selected-packages (append lcw-ide-packages lcw-theme-packages))
+(setq package-selected-packages
+      (append lcw-ide-packages lcw-theme-packages '(agent-shell-tramp)))
 
 ;; Dedicated language tools, including Node for desktop-launched Emacs.
 (dolist (tool-dir
@@ -64,6 +91,7 @@
                   init-editing
                   init-ui
                   init-project
+                  init-agent
                   init-programming))
   (require module))
 
