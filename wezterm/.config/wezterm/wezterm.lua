@@ -42,6 +42,23 @@ config.font = wezterm.font_with_fallback {
   'Noto Sans Mono CJK SC',
 }
 config.font_size = 12.0
+
+-- ── 斜体 → 楷体（中文排版惯例：强调用楷体而非倾斜）──
+-- nvim 的 render-markdown 给 *强调* 打 italic 属性，WezTerm 按下表换字体。
+-- 用【LXGW WenKai Mono 等宽版】：拉丁严格半宽(500)、汉字全宽(1000)，
+-- 与主字体 Maple(600/1200) 同比例，严格 2:1，逐字符宽度分类已实测一致
+-- （仅 — … 两个两可字符为全宽，完整占格，不影响栅格）。
+-- 注：①定义 font_rules 后，没匹配到的组合会退回 config.font（丢粗体），
+--      所以四种组合要列全；②主字体自带 CJK 字形，文楷必须排最前才生效。
+local kai = wezterm.font_with_fallback { 'LXGW WenKai Mono', 'Maple Mono NF CN', 'Noto Sans Mono CJK SC' }
+local kai_bold = wezterm.font_with_fallback { 'LXGW WenKai Mono Medium', 'Maple Mono NF CN', 'Noto Sans Mono CJK SC' }
+config.font_rules = {
+  { intensity = 'Normal', italic = false, font = config.font },
+  { intensity = 'Normal', italic = true, font = kai },
+  { intensity = 'Bold',   italic = false,
+    font = wezterm.font_with_fallback { { family = 'Maple Mono NF CN', weight = 'Bold' }, 'Noto Sans Mono CJK SC' } },
+  { intensity = 'Bold',   italic = true, font = kai_bold },
+}
 config.color_scheme = 'Catppuccin Mocha'   -- 内置主题，可换 'Tokyo Night' / 'GitHub Dark' 等
 config.window_padding = { left = 6, right = 6, top = 4, bottom = 4 }
 config.hide_tab_bar_if_only_one_tab = false -- 状态栏常驻

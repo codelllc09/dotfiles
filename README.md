@@ -15,8 +15,9 @@
 | 終端 | wezterm **20260901 nightly**（非 distro 稳定版，坑位记录见 agent_monitor.lua 档头） |
 | Bash 行編輯器 | ble.sh 0.4 nightly（由 `install.sh` 安裝至 XDG data 目錄） |
 | 編輯器 | GNU Emacs 30.2（原生 package.el + use-package 模組化配置） |
+| 文檔器 | Neovim 0.12.5（render-markdown 閱讀 + mini 六模塊；插件由內置 vim.pack 首啓自動下載） |
 | 輸入法 | ibus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
-| 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底 |
+| 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底；斜體楷體用 LXGW WenKai Mono（GitHub lxgw/LxgwWenKai v1.530，手動下載至 ~/.local/share/fonts，不入庫） |
 
 ### 升級後檢查清單
 
@@ -68,6 +69,10 @@ emacs/
   .emacs.d/lisp/init-programming.el   → Tree-sitter、Eglot、格式化、測試與除錯
   .emacs.d/snippets/                  → 個人 YASnippet 模板
   .emacs.d/tools/                     → Node/Python 工具的可重建版本清單
+
+nvim/
+  .config/nvim/init.lua               → ~/.config/nvim/init.lua（文檔查看器定位，全部配置）
+  .config/nvim/nvim-pack-lock.json    → vim.pack 插件版本鎖（4 個插件釘 rev，新機首啓自動下載同版本）
 ```
 
 v4 模塊化（2026-09-04）：原 476 行單文件按功能拆成上述模塊（教訓：單文件
@@ -85,6 +90,16 @@ Tree-sitter grammar、工具虛擬環境及會話資料仍留在 `~/.emacs.d/`�
 ```bash
 emacs --batch -Q --load ~/.emacs.d/init.el --eval '(message "Emacs config OK")'
 ```
+
+Neovim 定位是「文檔查看器 + 輕量編輯器」：render-markdown（==螢光筆高亮、
+代碼塊/行內代碼分色，配 Catppuccin Mocha 色板）+ snacks image 模塊
+（WezTerm 不支持 unicode 佔位符，僅懸浮窗預覽：`\i`）+ mini.nvim
+（files/pick/icons/pairs/surround/trailspace 六模塊）+ nvim-treesitter
+（只爲安裝 json/yaml parser，markdown 系隨 nvim 自帶）。高亮/摺疊用
+0.11+ 內置引擎（`vim.treesitter.start()`），無舊式 setup({highlight})。
+驗證：`nvim --headless +'lua print(type(MiniPick))' +qa` 輸出 table 即配置健全。
+注意：Windows 端 nvim 配置路徑是 `%LOCALAPPDATA%\nvim`，install.ps1 不映射
+此包，真用上 Windows 再補。
 
 Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；实际配置
 位于 `~/.config/bash/`。命令历史属于 state，部署脚本会在目标尚不存在时
