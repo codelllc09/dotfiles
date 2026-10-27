@@ -41,7 +41,21 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
 ;; Load the struct accessors before defining commands that update session
 ;; fields.  The package itself remains conditional for fresh installations.
 (when (locate-library "dirvish")
-  (require 'dirvish))
+  (require 'dirvish)
+  ;; NonGNU ELPA 2.3 keeps dirvish-side in the extensions subdirectory
+  ;; without autoloads.  The use-package form below adds that path too,
+  ;; but only after this block has run, so extend `load-path' here first.
+  (when-let* ((library (locate-library "dirvish"))
+              (extensions (expand-file-name "extensions"
+                                            (file-name-directory library))))
+    (when (file-directory-p extensions)
+      (add-to-list 'load-path extensions)))
+  ;; The side-bar extension ships without autoloads entries, so `M-x
+  ;; dirvish-side' stays invisible until it is loaded here explicitly.
+  ;; `dirvish-side-follow-mode' makes the tree reveal the current file,
+  ;; like the VSCode explorer sidebar.
+  (require 'dirvish-side)
+  (dirvish-side-follow-mode 1))
 
 (defun lcw-dirvish-listing-shows-hidden-p (switches)
   "Return non-nil when ls SWITCHES include hidden files."
@@ -134,6 +148,11 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
   :custom
   (dirvish-attributes
    '(vc-state subtree-state nerd-icons collapse file-time file-size))
+  ;; `dirvish-side-attributes' defaults to a snapshot of
+  ;; `dirvish-attributes' taken when dirvish-side loads, which happens
+  ;; before this :custom applies.  Set it explicitly, and keep only
+  ;; attributes that fit the narrow tree (no time/size/collapse).
+  (dirvish-side-attributes '(vc-state subtree-state nerd-icons))
   (dirvish-use-header-line 'global)
   (dirvish-mode-line-bar-image-width 0)
   :config
@@ -141,35 +160,40 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-disable-legacy-icons)
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-sync-listing-switches))
 
-;; Expand directories in place with indentation instead of opening another
-;; flat Dired listing. RET still visits the directory normally.
-(defun lcw-dired-subtree-refresh-icons ()
-  "Refresh Nerd Icons after a Dired subtree changes."
-  (when (and (bound-and-true-p nerd-icons-dired-mode)
-             (fboundp 'nerd-icons-dired--refresh))
-    (nerd-icons-dired--refresh)))
+;; dired-subtree expanded subdirectories in place inside plain Dired
+;; buffers; it served the retired left Dired panel.  Dirvish ships its own
+;; subtree (TAB = dirvish-subtree-toggle), so this block stays disabled.
+;; Uncomment everything below to restore.  -- retired 2026-10
+;;
+;; (defun lcw-dired-subtree-refresh-icons ()
+;;   "Refresh Nerd Icons after a Dired subtree changes."
+;;   (when (and (bound-and-true-p nerd-icons-dired-mode)
+;;              (fboundp 'nerd-icons-dired--refresh))
+;;     (nerd-icons-dired--refresh)))
+;;
+;; (defun lcw-dired-subtree-line-prefix (depth)
+;;   "Return a subtle four-column tree guide repeated for DEPTH."
+;;   (apply #'concat
+;;          (make-list depth (propertize "│   " 'face 'shadow))))
+;;
+;; (use-package dired-subtree
+;;   :if (locate-library "dired-subtree")
+;;   :after dired
+;;   :bind (:map dired-mode-map
+;;               ("TAB" . dired-subtree-toggle)
+;;               ("<tab>" . dired-subtree-toggle))
+;;   :custom
+;;   (dired-subtree-line-prefix #'lcw-dired-subtree-line-prefix)
+;;   (dired-subtree-use-backgrounds nil)
+;;   :config
+;;   (add-hook 'dired-subtree-after-insert-hook
+;;             #'lcw-dired-subtree-refresh-icons 90)
+;;   (add-hook 'dired-subtree-after-remove-hook
+;;             #'lcw-dired-subtree-refresh-icons 90))
 
-(defun lcw-dired-subtree-line-prefix (depth)
-  "Return a subtle four-column tree guide repeated for DEPTH."
-  (apply #'concat
-         (make-list depth (propertize "│   " 'face 'shadow))))
-
-(use-package dired-subtree
-  :if (locate-library "dired-subtree")
-  :after dired
-  :bind (:map dired-mode-map
-              ("TAB" . dired-subtree-toggle)
-              ("<tab>" . dired-subtree-toggle))
-  :custom
-  (dired-subtree-line-prefix #'lcw-dired-subtree-line-prefix)
-  (dired-subtree-use-backgrounds nil)
-  :config
-  (add-hook 'dired-subtree-after-insert-hook
-            #'lcw-dired-subtree-refresh-icons 90)
-  (add-hook 'dired-subtree-after-remove-hook
-            #'lcw-dired-subtree-refresh-icons 90))
-
-;; Two independent, opt-in panels. They do not impose a persistent IDE layout.
+;; Opt-in side panels that impose no persistent IDE layout.  File browsing
+;; moved to Dirvish on C-x d (see above); the left Dired panel was retired
+;; with dired-subtree in 2026-10.
 (defun lcw-project-root-or-default ()
   "Return the current project root, falling back to `default-directory'."
   (if-let ((project (project-current nil)))
@@ -214,12 +238,6 @@ Place a new panel on SIDE using SIZE as its width or height."
     (when (and (eq kind 'terminal) (window-live-p window))
       (set-window-scroll-bars window nil nil nil nil t))
     window))
-
-(defun lcw-toggle-dired-panel ()
-  "Open, focus, or close a Dired panel for the current project."
-  (interactive)
-  (let ((root (lcw-project-root-or-default)))
-    (lcw-toggle-panel 'dired root (dired-noselect root) 'left 0.24)))
 
 (use-package vterm
   :if (locate-library "vterm")
@@ -281,7 +299,7 @@ Place a new panel on SIDE using SIZE as its width or height."
     (lcw-toggle-panel 'terminal root (lcw-project-vterm-buffer root)
                       'bottom 0.30)))
 
-(keymap-set window-prefix-map "f" #'lcw-toggle-dired-panel)
+(keymap-set window-prefix-map "f" #'dirvish-side)
 (keymap-set window-prefix-map "t" #'lcw-toggle-terminal-panel)
 
 ;; Translate ANSI colors from compilers, test runners, and package scripts.

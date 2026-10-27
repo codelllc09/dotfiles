@@ -445,30 +445,27 @@ VLF 是長期使用的 GNU ELPA 套件，但 1.7.2 在 Emacs 30 編譯時仍會�
 測試結果：20,015 字元的單行 JSON 成功觸發 so-long；5,460,000 bytes
 測試檔只載入 1,000,000 bytes 的 VLF chunk。
 
-## IDE 四區佈局
+## 側欄面板與檔案瀏覽
 
-先開啟專案內任意檔案，再按 C-x w i。Emacs 會保留普通視窗作為
-中央代碼區，並顯示左側 Dired、下方 ansi-term 和右側 agent CLI。
-各專案、各 agent 有自己的終端 buffer；切換或收起側窗不會終止程序。
+檔案瀏覽走 Dirvish：C-x d 以全屏多面板（父目錄、檔案列表、即時預覽）
+開啟當前目錄，C-u C-x d 先提示目錄；h/j/k/l 導航、. 切換隱藏檔案、
+TAB 展開子樹、M-f/M-b 翻歷史、? 打開功能面板。C-x C-f 保持 minibuffer
+補全不變。左側 Dired 面板與 dired-subtree 已於 2026-10 退役（程式碼以
+註釋保留）；需要樹狀側欄時用 dirvish-side（C-x w f，自動跟隨當前檔案）。
 
 | 按鍵 | 操作 |
 |---|---|
-| C-x w i | 補齊並顯示整套 IDE 佈局 |
-| C-x w f | 單獨顯示／收起左側專案文件 |
-| C-x w t | 單獨顯示／收起下方專案終端 |
+| C-x d | 全屏 Dirvish（C-u 先提示目錄） |
+| C-x w f | 左側 Dirvish 檔案樹（dirvish-side，自動跟隨當前檔案） |
+| C-x w t | 單獨顯示／收起下方專案 vterm 終端 |
 | C-x w a | 顯示／收起目前選定的 agent |
 | C-x w A | 從已安裝的 Codex、Pi、Copilot CLI 中選擇 agent |
-| C-x w c | 從側窗回到中央普通視窗 |
 | C-x w s | Emacs 原生命令：暫藏／恢復全部側窗 |
 | C-x o | 在可見視窗之間循環 |
 
-終端與 agent 使用 ansi-term 的 char mode 時，C-x 會傳給終端；此時
-用 C-c w f/t/a/A/i/c/s 執行同一組視窗命令。也可先按 C-c C-j 進入
-line mode，使用普通 Emacs 鍵位；C-c C-k 回到 char mode。
-
-左側 Dired 用 n/p 移動、o 在中央開檔、i 展開子目錄、^ 返回上層、
-g 重新整理。下方是 shell，可直接執行測試、建置或 yazi；Yazi 是
-終端檔案管理器，不是終端後端。
+各專案的終端 buffer 相互獨立；切換或收起側窗不會終止程序。下方
+vterm 可直接執行測試、建置或 yazi；Yazi 是終端檔案管理器，不是
+終端後端。
 
 目前偵測到 Codex 與 Pi；預設 agent 是 Codex。C-x w A 切換到 Pi 時，
 Codex 程序會留在自己的隱藏 buffer，下次切回可繼續原會話，反之亦然。
