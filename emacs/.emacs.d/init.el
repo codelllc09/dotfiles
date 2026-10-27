@@ -55,8 +55,9 @@
   "Packages installed explicitly by `lcw-install-ide-packages'.")
 
 (defconst lcw-theme-packages
-  '(doom-themes catppuccin-theme nord-theme gruvbox-theme solarized-theme
-    nerd-icons nerd-icons-dired nerd-icons-corfu nerd-icons-completion)
+  '(doom-themes doom-modeline catppuccin-theme nord-theme gruvbox-theme
+    solarized-theme nerd-icons nerd-icons-dired nerd-icons-corfu
+    nerd-icons-completion dashboard page-break-lines)
   "Theme and icon packages installed by `lcw-install-ide-packages'.")
 
 (defun lcw-install-ide-packages ()

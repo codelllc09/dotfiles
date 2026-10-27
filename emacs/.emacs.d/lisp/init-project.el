@@ -177,11 +177,33 @@ Place a new panel on SIDE using SIZE as its width or height."
   "Keep Tab Line disabled when restoring an older desktop session."
   (tab-line-mode -1))
 
+(defconst lcw-desktop-directory (expand-file-name "state/desktop/" user-emacs-directory)
+  "Directory holding the session saved by `desktop'.")
+
+(defun lcw-restore-desktop ()
+  "Restore the session saved by the previous Emacs.
+Startup deliberately shows the dashboard instead, so this is the explicit way
+back into the last session."
+  (interactive)
+  (setq desktop-dirname lcw-desktop-directory)
+  (unless (desktop-read lcw-desktop-directory)
+    (user-error "No desktop file in %s" (abbreviate-file-name lcw-desktop-directory)))
+  (lcw-desktop-enable-saving))
+
+(defun lcw-desktop-enable-saving (&rest _)
+  "Start saving the session once the session is actually in use.
+`desktop' restores from its own `after-init-hook' entry and rewrites the file
+on exit whenever `desktop-save-mode' is on.  Leaving the mode off until the
+session is restored (or a file is visited) keeps quitting straight from the
+dashboard from overwriting the previous session with an empty one."
+  (unless desktop-save-mode
+    (setq desktop-dirname lcw-desktop-directory)
+    (desktop-save-mode 1)))
+
 (use-package desktop
   :ensure nil
   :custom
-  (desktop-path (list (expand-file-name "state/desktop/"
-                                         user-emacs-directory)))
+  (desktop-path (list lcw-desktop-directory))
   (desktop-base-file-name "session")
   (desktop-base-lock-name "session.lock")
   (desktop-save t)
@@ -195,9 +217,13 @@ Place a new panel on SIDE using SIZE as its width or height."
   (add-to-list 'desktop-minor-mode-handlers
                '(tab-line-mode . lcw-desktop-ignore-tab-line))
   (add-hook 'desktop-after-read-hook #'lcw-disable-tab-line-in-all-buffers)
-  ;; Batch tests must neither restore nor overwrite the interactive session.
+  ;; See `lcw-desktop-enable-saving': the mode stays off during startup so that
+  ;; `after-init-hook' does not restore the previous session, and it is switched
+  ;; on again as soon as that session is in use.
   (unless noninteractive
-    (desktop-save-mode 1)))
+    (setq desktop-dirname lcw-desktop-directory)
+    (add-hook 'find-file-hook #'lcw-desktop-enable-saving 90)
+    (add-hook 'dired-mode-hook #'lcw-desktop-enable-saving 90)))
 
 (provide 'init-project)
 ;;; init-project.el ends here
