@@ -246,8 +246,9 @@ Dape 經 GDB DAP 啟動並停在 main.cpp 的 main 函式。
 ## Markdown 編輯
 
 Emacs 使用官方 markdown-mode 2.8；所有 .md 和 .markdown 使用其 gfm-mode
-擴充模式，並啟用 fenced code block 原生語言高亮、Obsidian 式 [[Wiki Links]]
-與數學語法辨識。GFM pipe table 會在同一個編輯 buffer 中顯示成 Unicode
+擴充模式，並啟用 fenced code block 原生語言高亮、Obsidian 式 [[Wiki Links]]、
+`==文字高亮==` 與數學語法辨識。`==...==` 是 Obsidian、Typora 等軟體支援的
+擴充語法，不屬於 CommonMark 或 GFM。GFM pipe table 會在同一個編輯 buffer 中顯示成 Unicode
 框線表格；游標進入表格時自動還原 Markdown 原文，離開後立即重新渲染，顯示
 過程不會修改檔案內容。C-c C-x t 可暫時開關表格預覽。Wiki links 只做語法
 顯示，不遞迴掃描大型專案或接管 vault。C-c C-h 顯示該模式完整鍵位。

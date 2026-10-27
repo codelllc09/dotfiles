@@ -214,6 +214,23 @@ reloads; remote buffers establish their baseline when opened or saved."
 (defvar-local lcw-markdown-table-preview--active-table nil)
 (defvar-local lcw-markdown-table-preview--tick -1)
 (defvar-local lcw-markdown-table-preview--window-pixel-width nil)
+(defvar-local lcw-markdown-table-preview--refreshing nil)
+(defvar-local lcw-markdown-highlighting-keywords-installed nil)
+
+(defun lcw-markdown-enable-obsidian-highlights ()
+  "Render nested Obsidian `==highlight==' markup reliably.
+Markdown Mode's built-in highlighter recognizes the delimiters, but a nested
+construct such as `==text **strong** text==' loses the highlight face when the
+strong-emphasis rule runs later.  Reapply only the highlight face with append
+semantics, leaving all nested faces intact."
+  (unless lcw-markdown-highlighting-keywords-installed
+    (font-lock-add-keywords
+     nil
+     `((,markdown-regex-highlighting
+        (4 'markdown-highlighting-face append)))
+     'append)
+    (setq-local lcw-markdown-highlighting-keywords-installed t)
+    (font-lock-flush)))
 
 (defun lcw-markdown-table-preview--split-row (line)
   "Return the cells in Markdown table LINE.
@@ -312,22 +329,36 @@ split a cell."
    (t 'left)))
 
 (defun lcw-markdown-table-preview--inline (text face)
-  "Return TEXT with simple inline Markdown rendered using FACE.
-The table preview replaces source lines with display strings, so Markdown's
-normal font-lock properties are not available there.  Preserve the most
-visible inline construct--strong emphasis--without exposing its markers."
-  (let ((start 0)
+  "Render strong and highlighted inline Markdown in TEXT using FACE.
+Table rows are display strings and cannot reuse the source buffer's font-lock
+properties.  Parse the two presentation constructs explicitly so nested forms
+such as `==text **strong** text==' retain both faces without showing markers."
+  (let ((position 0)
         pieces)
-    (while (string-match "\\*\\*\\([^*\n]+\\)\\*\\*" text start)
-      (push (propertize (substring text start (match-beginning 0))
-                        'face face)
-            pieces)
-      (push (propertize (match-string 1 text)
-                        'face (cons 'bold
-                                    (if (listp face) face (list face))))
-            pieces)
-      (setq start (match-end 0)))
-    (push (propertize (substring text start) 'face face) pieces)
+    (while (string-match "\\(\\*\\*\\|==\\)" text position)
+      (let* ((open-begin (match-beginning 0))
+             (open-end (match-end 0))
+             (delimiter (match-string 0 text))
+             (close (string-match (regexp-quote delimiter) text open-end)))
+        (if (not close)
+            (progn
+              (push (propertize (substring text position) 'face face) pieces)
+              (setq position (length text)))
+          (push (propertize (substring text position open-begin)
+                            'face face)
+                pieces)
+          (let* ((added-face
+                  (if (equal delimiter "**")
+                      'bold
+                    'markdown-highlighting-face))
+                 (nested-face
+                  (cons added-face
+                        (if (listp face) face (list face)))))
+            (push (lcw-markdown-table-preview--inline
+                   (substring text open-end close) nested-face)
+                  pieces))
+          (setq position (+ close (length delimiter))))))
+    (push (propertize (substring text position) 'face face) pieces)
     (apply #'concat (nreverse pieces))))
 
 (defun lcw-markdown-table-preview--pixel-width (string)
@@ -559,6 +590,12 @@ UNIT is one canonical fixed-pitch character in pixels."
 
 (defun lcw-markdown-table-preview--clear ()
   "Remove all table preview overlays from the current buffer."
+  ;; Also remove tagged orphans.  Redisplay and window-change hooks can run
+  ;; while a preview is being rebuilt; older versions could consequently lose
+  ;; one overlay set from the tracking list and draw a table twice.
+  (dolist (overlay (overlays-in (point-min) (point-max)))
+    (when (overlay-get overlay 'lcw-markdown-table-preview)
+      (delete-overlay overlay)))
   (mapc #'delete-overlay lcw-markdown-table-preview--overlays)
   (setq lcw-markdown-table-preview--overlays nil))
 
@@ -572,24 +609,27 @@ UNIT is one canonical fixed-pitch character in pixels."
 (defun lcw-markdown-table-preview-refresh (&optional force)
   "Refresh in-buffer Markdown table previews.
 With FORCE, rebuild previews even when neither text nor point context changed."
-  (when lcw-markdown-table-preview-mode
-    (let* ((tick (buffer-chars-modified-tick))
-           (text-changed (/= tick lcw-markdown-table-preview--tick))
-           (tables (if text-changed
-                       (lcw-markdown-table-preview--scan)
-                     lcw-markdown-table-preview--tables))
-           (active (lcw-markdown-table-preview--table-at-point tables)))
-      (when (or force text-changed
-                (not (equal active lcw-markdown-table-preview--active-table)))
-        (lcw-markdown-table-preview--clear)
-        (setq lcw-markdown-table-preview--tables tables
-              lcw-markdown-table-preview--active-table active
-              lcw-markdown-table-preview--tick tick)
-        (dolist (table tables)
-          ;; Reveal the source of the table being edited.  Other tables stay
-          ;; rendered, like the anti-conceal behavior of live-preview editors.
-          (unless (equal table active)
-            (lcw-markdown-table-preview--render table)))))))
+  (when (and lcw-markdown-table-preview-mode
+             (not lcw-markdown-table-preview--refreshing))
+    (let ((lcw-markdown-table-preview--refreshing t))
+      (let* ((tick (buffer-chars-modified-tick))
+             (text-changed (/= tick lcw-markdown-table-preview--tick))
+             (tables (if text-changed
+                         (lcw-markdown-table-preview--scan)
+                       lcw-markdown-table-preview--tables))
+             (active (lcw-markdown-table-preview--table-at-point tables)))
+        (when (or force text-changed
+                  (not (equal active
+                              lcw-markdown-table-preview--active-table)))
+          (lcw-markdown-table-preview--clear)
+          (setq lcw-markdown-table-preview--tables tables
+                lcw-markdown-table-preview--active-table active
+                lcw-markdown-table-preview--tick tick)
+          (dolist (table tables)
+            ;; Reveal the source of the table being edited.  Other tables stay
+            ;; rendered, like anti-conceal behavior in live-preview editors.
+            (unless (equal table active)
+              (lcw-markdown-table-preview--render table))))))))
 
 (defun lcw-markdown-table-preview-refresh-visible-windows ()
   "Reflow visible table previews whose window width has changed."
@@ -625,6 +665,7 @@ With FORCE, rebuild previews even when neither text nor point context changed."
 (defun lcw-markdown-pretty ()
   "Use a more Obsidian-like Markdown display."
   (visual-line-mode 1)
+  (lcw-markdown-enable-obsidian-highlights)
   (when (display-images-p)
     (markdown-display-inline-images)))
 
@@ -653,6 +694,7 @@ the regular `gfm-mode-hook' setup must be applied from its preview hook."
   (markdown-fontify-code-blocks-natively t)
   (markdown-enable-wiki-links t)
   (markdown-enable-math t)
+  (markdown-enable-highlighting-syntax t)
   (markdown-hide-markup t)
   (markdown-hide-urls t)
   (markdown-header-scaling t)
