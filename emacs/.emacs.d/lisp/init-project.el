@@ -22,6 +22,125 @@
   (dired-dwim-target t)
   (dired-listing-switches "-alh"))
 
+;; A full-frame, multi-pane file browser with live previews lives on the
+;; classic Dired key.  C-x C-f keeps the minibuffer completion workflow; a
+;; prefix argument prompts for the directory first, like classic C-x d.
+(defun lcw-browse-files (prompt-for-dir)
+  "Browse files visually, or PROMPT-FOR-DIR like classic `dired'.
+Interactively, PROMPT-FOR-DIR is the prefix argument."
+  (interactive "P")
+  (if prompt-for-dir
+      (call-interactively #'dired)
+    (dirvish default-directory)))
+
+(defun lcw-dirvish-disable-legacy-icons ()
+  "Let Dirvish be the sole icon renderer in its Dired buffer."
+  (when (bound-and-true-p nerd-icons-dired-mode)
+    (nerd-icons-dired-mode -1)))
+
+;; Load the struct accessors before defining commands that update session
+;; fields.  The package itself remains conditional for fresh installations.
+(when (locate-library "dirvish")
+  (require 'dirvish))
+
+(defun lcw-dirvish-listing-shows-hidden-p (switches)
+  "Return non-nil when ls SWITCHES include hidden files."
+  (seq-some
+   (lambda (switch)
+     (or (member switch '("--all" "--almost-all"))
+         (and (string-match-p "\\`-[^-]" switch)
+              (string-match-p "[aA]" switch))))
+   (split-string switches nil t)))
+
+(defun lcw-dirvish-set-hidden-switch (switches show)
+  "Return ls SWITCHES adjusted to SHOW or hide dotfiles."
+  (let ((parts (split-string switches nil t)))
+    (if show
+        (if (lcw-dirvish-listing-shows-hidden-p switches)
+            switches
+          (mapconcat #'identity (cons "-A" parts) " "))
+      (mapconcat
+       #'identity
+       (delq
+        nil
+        (mapcar
+         (lambda (switch)
+           (cond
+            ((member switch '("--all" "--almost-all")) nil)
+            ((string-match-p "\\`-[^-]+\\'" switch)
+             (let ((trimmed
+                    (replace-regexp-in-string "[aA]" "" switch)))
+               (unless (equal trimmed "-") trimmed)))
+            (t switch)))
+         parts))
+       " "))))
+
+(defun lcw-dirvish-sync-listing-switches ()
+  "Keep previews consistent with the current Dirvish session."
+  (when-let ((session (dirvish-curr)))
+    (setq-local dired-listing-switches (dv-ls-switches session))))
+
+(defun lcw-dirvish-toggle-hidden-files ()
+  "Toggle dotfiles throughout the current Dirvish session."
+  (interactive)
+  (let* ((session (or (dirvish-curr)
+                      (user-error "Not in a Dirvish session")))
+         (show (not (lcw-dirvish-listing-shows-hidden-p
+                     (dv-ls-switches session))))
+         (switches
+          (lcw-dirvish-set-hidden-switch (dv-ls-switches session) show))
+         (index-buffer (cdr (dv-index session)))
+         (root-window (dv-root-window session)))
+    (setf (dv-ls-switches session) switches)
+    (dolist (root (dv-roots session))
+      (when (buffer-live-p (cdr root))
+        (with-current-buffer (cdr root)
+          (setq-local dired-listing-switches switches)
+          (dired-sort-other switches))))
+    ;; Parent and preview panes cache directory contents separately.
+    (clrhash (dv-parent-hash session))
+    (clrhash (dv-preview-hash session))
+    (when (and (buffer-live-p index-buffer) (window-live-p root-window))
+      (with-selected-window root-window
+        (switch-to-buffer index-buffer)
+        (dirvish--build-layout session)
+        (dirvish--redisplay)))
+    (message "Hidden files %s" (if show "shown" "hidden"))))
+
+(use-package dirvish
+  :if (locate-library "dirvish")
+  :commands dirvish
+  :init
+  ;; NonGNU ELPA 2.3 keeps optional features in this subdirectory without
+  ;; adding it to `load-path'; newer releases do so during installation.
+  (when-let* ((library (locate-library "dirvish"))
+              (extensions
+               (expand-file-name "extensions" (file-name-directory library))))
+    (when (file-directory-p extensions)
+      (add-to-list 'load-path extensions)))
+  (dirvish-override-dired-mode 1)
+  :bind (("C-x d" . lcw-browse-files)
+         :map dirvish-mode-map
+         ("h" . dired-up-directory)
+         ("j" . dired-next-line)
+         ("k" . dired-previous-line)
+         ("l" . dired-find-file)
+         ("." . lcw-dirvish-toggle-hidden-files)
+         ("?" . dirvish-dispatch)
+         ("TAB" . dirvish-subtree-toggle)
+         ("<tab>" . dirvish-subtree-toggle)
+         ("M-f" . dirvish-history-go-forward)
+         ("M-b" . dirvish-history-go-backward))
+  :custom
+  (dirvish-attributes
+   '(vc-state subtree-state nerd-icons collapse file-time file-size))
+  (dirvish-use-header-line 'global)
+  (dirvish-mode-line-bar-image-width 0)
+  :config
+  (require 'dirvish-history)
+  (add-hook 'dirvish-setup-hook #'lcw-dirvish-disable-legacy-icons)
+  (add-hook 'dirvish-setup-hook #'lcw-dirvish-sync-listing-switches))
+
 ;; Expand directories in place with indentation instead of opening another
 ;; flat Dired listing. RET still visits the directory normally.
 (defun lcw-dired-subtree-refresh-icons ()

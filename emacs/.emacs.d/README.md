@@ -246,13 +246,16 @@ Dape 經 GDB DAP 啟動並停在 main.cpp 的 main 函式。
 ## Markdown 編輯
 
 Emacs 使用官方 markdown-mode 2.8；所有 .md 和 .markdown 使用其 gfm-mode
-擴充模式。原始標記保持可見，並啟用 fenced code block 原生語言高亮、
-Obsidian 式 [[Wiki Links]] 與數學語法辨識。Wiki links 只做語法顯示，不遞迴掃描
-大型專案或接管 vault。C-c C-h 顯示該模式完整鍵位。
+擴充模式，並啟用 fenced code block 原生語言高亮、Obsidian 式 [[Wiki Links]]
+與數學語法辨識。GFM pipe table 會在同一個編輯 buffer 中顯示成 Unicode
+框線表格；游標進入表格時自動還原 Markdown 原文，離開後立即重新渲染，顯示
+過程不會修改檔案內容。C-c C-x t 可暫時開關表格預覽。Wiki links 只做語法
+顯示，不遞迴掃描大型專案或接管 vault。C-c C-h 顯示該模式完整鍵位。
 
 此配置只負責 Markdown 編輯，不接管 Obsidian vault、反向連結、每日筆記、
 Excalidraw、Canvas 或同步。沒有安裝 obsidian.el。HTML 預覽與導出需要
-Pandoc、cmark 等外部渲染器，本機目前未安裝，因此也沒有配置自動預覽。
+Pandoc、cmark 等外部渲染器，本機目前未安裝，因此沒有配置完整 HTML 預覽；
+上述表格預覽完全由 Emacs 顯示層完成，不依賴外部程式。
 
 套件來源固定為官方倉庫 https://github.com/jrblevin/markdown-mode 的
 v2.8（commit f5d520b3ee7722dd2231ab586ba51d8eb166e49b），保存在

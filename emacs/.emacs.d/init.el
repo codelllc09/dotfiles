@@ -49,7 +49,7 @@
              (expand-file-name "vendor/markdown-mode" user-emacs-directory))
 
 (defconst lcw-ide-packages
-  '(vertico orderless marginalia consult corfu magit dired-subtree vterm dape lua-mode pdf-tools
+  '(vertico orderless marginalia consult corfu magit dirvish dired-subtree vterm dape lua-mode pdf-tools
     autothemer avy embark embark-consult yasnippet cape multiple-cursors
     paredit vlf agent-shell flymake-ruff)
   "Packages installed explicitly by `lcw-install-ide-packages'.")
