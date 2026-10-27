@@ -25,3 +25,6 @@ emacs/.emacs.d/tools/node/node_modules/
 emacs/.emacs.d/tools/python/
 emacs/.emacs.d/tools/lua-ls/
 emacs/.emacs.d/tools/*.tar.gz
+
+# Yazi 只收配置與插件清單；插件本體由 ya pkg 下載（若被誤拷進包目錄亦忽略）
+yazi/.config/yazi/plugins/

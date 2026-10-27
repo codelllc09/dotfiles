@@ -1,0 +1,24 @@
+# ~/.config/yazi/keymap.toml —— 只写增量绑定，自动与默认 keymap 合并
+
+# <C-t>: 用 swayimg 打开当前目录的缩略图画廊（选中图上按 Enter 进单图模式）
+[[mgr.prepend_keymap]]
+on   = "<C-t>"
+run  = "plugin thumbnail"
+desc = "Open thumbnail gallery (swayimg)"
+
+# T: 预览面板最大化/还原（全屏快速预览，j/k 上下张）
+[[mgr.prepend_keymap]]
+on   = "T"
+run  = "plugin toggle-pane max-preview"
+desc = "Maximize or restore the preview pane"
+
+# +/-: 终端内预览图缩放（覆盖默认的 `-` symlink 绑定）
+[[mgr.prepend_keymap]]
+on   = "+"
+run  = "plugin zoom 1"
+desc = "Zoom in hovered file"
+
+[[mgr.prepend_keymap]]
+on   = "-"
+run  = "plugin zoom -1"
+desc = "Zoom out hovered file"

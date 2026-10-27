@@ -18,6 +18,7 @@
 | 文檔器 | Neovim 0.12.5（render-markdown 閱讀 + mini 六模塊；插件由內置 vim.pack 首啓自動下載） |
 | 輸入法 | ibus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
 | 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底；斜體楷體用 LXGW WenKai Mono（GitHub lxgw/LxgwWenKai v1.530，手動下載至 ~/.local/share/fonts，不入庫） |
+| 文件管理器 | yazi 26.9.1（插件由 ya pkg 管理）+ swayimg 5.6 / ffmpegthumbnailer 2.3（dnf；畫廊式看圖與視頻首幀） |
 
 ### 升級後檢查清單
 
@@ -73,6 +74,11 @@ emacs/
 nvim/
   .config/nvim/init.lua               → ~/.config/nvim/init.lua（文檔查看器定位，全部配置）
   .config/nvim/nvim-pack-lock.json    → vim.pack 插件版本鎖（4 個插件釘 rev，新機首啓自動下載同版本）
+
+yazi/
+  .config/yazi/keymap.toml            → 增量鍵位：<C-t> 開 swayimg 縮略圖畫廊、T 預覽最大化、+/- 預覽縮放
+  .config/yazi/yazi.toml              → 預覽尺寸上限 2000×2000（zoom 插件放大不被截斷）
+  .config/yazi/package.toml           → ya pkg 插件清單（toggle-pane/zoom/thumbnail），新機 ya pkg install 復原
 ```
 
 v4 模塊化（2026-09-04）：原 476 行單文件按功能拆成上述模塊（教訓：單文件
@@ -98,6 +104,13 @@ Neovim 定位是「文檔查看器 + 輕量編輯器」：render-markdown（==�
 （只爲安裝 json/yaml parser，markdown 系隨 nvim 自帶）。高亮/摺疊用
 0.11+ 內置引擎（`vim.treesitter.start()`），無舊式 setup({highlight})。
 驗證：`nvim --headless +'lua print(type(MiniPick))' +qa` 輸出 table 即配置健全。
+
+Yazi 看圖走兩條路：終端內快速預覽（T 最大化後 j/k 上下張、+/- 縮放，官方
+toggle-pane/zoom 插件）；GUI 式體驗按 <C-t> 開 swayimg 畫廊（PgDn/PgUp 翻頁、
+縮放保留、方向鍵/拖動平移、Enter 畫廊↔單圖、Esc 回 yazi）。swayimg 與
+ffmpegthumbnailer（視頻首幀）由 dnf 安裝，不入庫；插件本體在
+~/.config/yazi/plugins 由 ya pkg 下載，清單記於 package.toml，新機先裝 yazi
+再 `ya pkg install` 復原。
 
 Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；实际配置
 位于 `~/.config/bash/`。命令历史属于 state，部署脚本会在目标尚不存在时

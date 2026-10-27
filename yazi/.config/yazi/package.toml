@@ -1,0 +1,17 @@
+[[plugin.deps]]
+use = "yazi-rs/plugins:zoom"
+rev = "e0bbd20"
+hash = "558bbb58e3dd36d488280a8f10e7b904"
+
+[[plugin.deps]]
+use = "tasnimAlam/thumbnail"
+rev = "f4da69d"
+hash = "63fab8f8359dea2df4b6972b1e73463c"
+
+[[plugin.deps]]
+use = "yazi-rs/plugins:toggle-pane"
+rev = "e0bbd20"
+hash = "5b2fbef7d1513ce38ff72623a071a5e"
+
+[flavor]
+deps = []

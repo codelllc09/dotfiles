@@ -1,0 +1,4 @@
+# ~/.config/yazi/yazi.toml —— 放大预览图的上限，不调大则 zoom 到 1000px 就被截住
+[preview]
+max_width  = 2000
+max_height = 2000
