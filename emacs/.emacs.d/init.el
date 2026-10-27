@@ -79,7 +79,7 @@
 
 ;; Dedicated language tools, including Node for desktop-launched Emacs.
 (dolist (tool-dir
-         (list "/home/lcw/.local/share/pi-node/node-v22.23.2-linux-x64/bin"
+         (list (expand-file-name "~/.local/share/pi-node/current/bin")
                (expand-file-name "tools/node/node_modules/.bin"
                                  user-emacs-directory)
                (expand-file-name "tools/python/bin" user-emacs-directory)

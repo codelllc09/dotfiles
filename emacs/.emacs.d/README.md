@@ -158,8 +158,10 @@ JS 遠端除錯還需要遠端 adapter 路徑與專案配置，尚未按特定�
 - Python 工具版本記錄：tools/python-requirements.txt。
 - LuaLS：3.19.1；js-debug：1.117.0。下載時已校驗官方 SHA-256。
 - Tree-sitter 語法版本列在 lisp/init-programming.el。缺少語法時執行 M-x treesit-install-language-grammar。
-- Node 目前使用本機既有的 ~/.local/share/pi-node/node-v22.23.2-linux-x64/bin。
-  若該 Node 被移除，請在 init.el 更新位置；語言工具存放在 ~/.emacs.d/tools/。
+- Node 優先使用本機 pi-node 維護的穩定入口 ~/.local/share/pi-node/current/bin；
+  pi-node 更新版本時只需更新 current 符號連結，無需修改 init.el。若未安裝
+  pi-node，請確保圖形介面啟動的 Emacs 能從 PATH 找到 Node。語言工具存放在
+  ~/.emacs.d/tools/。
 - Customize 設定放在 custom.el；備份與自動儲存位於 backups/、auto-saves/。
 - 啟動出錯用 emacs --debug-init；emacs -Q 可跳過配置。移開 init.el 即可停用配置。
 
