@@ -20,7 +20,10 @@
   :ensure nil
   :custom
   (dired-dwim-target t)
-  (dired-listing-switches "-alh"))
+  ;; Directories first, then files, each group alphabetically.  Requires
+  ;; GNU coreutils ls (fine locally and in Linux containers; BSD/macOS
+  ;; remote ls would not know the flag).
+  (dired-listing-switches "-alh --group-directories-first"))
 
 ;; A full-frame, multi-pane file browser with live previews lives on the
 ;; classic Dired key.  C-x C-f keeps the minibuffer completion workflow; a
