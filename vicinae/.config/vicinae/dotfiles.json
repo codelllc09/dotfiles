@@ -9,6 +9,10 @@
     },
     "clock": {
       "enabled": false
+    },
+    "size": {
+      "width": 770,
+      "height": 320
     }
   },
   "theme": {
