@@ -144,6 +144,8 @@ curl -sL -o /tmp/vicinae-ext.zip 'https://github.com/vicinaehq/gnome-extension/r
 dotfiles.json 並在 settings.json 的 imports 數組引入（官方推薦模式）；
 GUI 改的值落在 settings.json 且優先級高於 imports。主題在 GUI 裏選。
 vicinae.db／剪貼板庫／文件索引／主題／snippets 屬 state，不入庫。
+商店擴展同屬 state（~/.local/share/vicinae/extensions/），但已裝清單在此登記，
+新機從 store 重裝：**Process Manager、Systemd、Kill Port**（2026-10-29 裝）。
 
 Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；实际配置
 位于 `~/.config/bash/`。命令历史属于 state，部署脚本会在目标尚不存在时
