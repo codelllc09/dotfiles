@@ -10,5 +10,10 @@
     "clock": {
       "enabled": false
     }
+  },
+  "theme": {
+    "light": {
+      "name": "rose-pine"
+    }
   }
 }
