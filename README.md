@@ -83,7 +83,7 @@ yazi/
 
 vicinae/
   .config/vicinae/dotfiles.json       → 我們的基礎配置（遙測關/緊湊模式/無時鐘），經 settings.json 的 imports 引入
-  .local/share/vicinae/scripts/       → 腳本命令：gh/bili/tr 網搜（@vicinae.* 註解式，percentEncoded）
+  .local/share/vicinae/scripts/       → 腳本命令：\gh/\bili/\tr 網搜（反斜杠前綴避免搶排名）（@vicinae.* 註解式，percentEncoded）
 ```
 
 v4 模塊化（2026-09-04）：原 476 行單文件按功能拆成上述模塊（教訓：單文件
