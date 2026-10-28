@@ -82,7 +82,7 @@ yazi/
   .config/yazi/package.toml           → ya pkg 插件清單（toggle-pane/zoom/thumbnail），新機 ya pkg install 復原
 
 vicinae/
-  .config/vicinae/settings.json       → 主配置（遙測已關；GUI 改設置直寫此文件）
+  .config/vicinae/dotfiles.json       → 我們的基礎配置（遙測關/緊湊模式/無時鐘），經 settings.json 的 imports 引入
   .local/share/vicinae/scripts/       → 腳本命令：gh/bili/tr 網搜（@vicinae.* 註解式，percentEncoded）
 ```
 
@@ -138,7 +138,11 @@ curl -sL -o /tmp/vicinae-ext.zip 'https://github.com/vicinaehq/gnome-extension/r
 另注意 GNOME 50 起 custom-keybinding 的 `binding` 鍵已改**純字符串**
 （`'<Super>r'`），寫舊數組格式 `"['<Super>r']"` 時 g-s-d 會把字面量整個
 傳給 Mutter 並**靜默**抓取失敗（僅 journal 可見 `not a valid accelerator`）。
-腳本命令在 `~/.local/share/vicinae/scripts/`（由本倉庫 symlink 管理，索引器跟軟鏈）；
+腳本命令在 `~/.local/share/vicinae/scripts/`（由本倉庫 symlink 管理，索引器跟軟鏈）。
+**配置文件分工**：GUI 保存設置時會用「臨時文件+原子替換」整個重寫
+`settings.json`（軟鏈會被替換成真文件——實測踩過），故本倉庫只管
+dotfiles.json 並在 settings.json 的 imports 數組引入（官方推薦模式）；
+GUI 改的值落在 settings.json 且優先級高於 imports。主題在 GUI 裏選。
 vicinae.db／剪貼板庫／文件索引／主題／snippets 屬 state，不入庫。
 
 Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；实际配置

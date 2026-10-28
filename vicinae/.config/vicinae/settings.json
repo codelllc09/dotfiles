@@ -1,6 +1,0 @@
-// 仓库管理的主配置（此文件同时被 ~/.config/vicinae/settings.json 软链引用）
-// 注意：通过 Vicinae GUI 改设置时会重写此文件，注释会丢失
-{
-  "$schema": "https://vicinae.com/schemas/config.json",
-  "telemetry": { "system_info": false }
-}
