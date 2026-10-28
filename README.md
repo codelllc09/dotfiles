@@ -19,7 +19,7 @@
 | 輸入法 | ibus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
 | 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底；斜體楷體用 LXGW WenKai Mono（GitHub lxgw/LxgwWenKai v1.530，手動下載至 ~/.local/share/fonts，不入庫） |
 | 文件管理器 | yazi 26.9.1（插件由 ya pkg 管理）+ swayimg 5.6 / ffmpegthumbnailer 2.3（dnf；畫廊式看圖與視頻首幀） |
-| 啟動器 | ulauncher 5.15.15（dnf；Wayland 下熱鍵走 GNOME 自定義快捷鍵，見 ulauncher 段） |
+| 啟動器 | vicinae 0.29.2（Terra 倉庫；Wayland 熱鍵走 GNOME 自定義快捷鍵，見 vicinae 段） |
 
 ### 升級後檢查清單
 
@@ -81,9 +81,9 @@ yazi/
   .config/yazi/yazi.toml              → 預覽尺寸上限 2000×2000（zoom 插件放大不被截斷）
   .config/yazi/package.toml           → ya pkg 插件清單（toggle-pane/zoom/thumbnail），新機 ya pkg install 復原
 
-ulauncher/
-  .config/ulauncher/settings.json     → 主設置（dark 主題、清空上次搜索、鼠標所在屏彈出）
-  .config/ulauncher/shortcuts.json    → 關鍵詞快捷搜索（g/so/wiki 三默認條）
+vicinae/
+  .config/vicinae/settings.json       → 主配置（遙測已關；GUI 改設置直寫此文件）
+  .local/share/vicinae/scripts/       → 腳本命令：gh/bili/tr 網搜（@vicinae.* 註解式，percentEncoded）
 ```
 
 v4 模塊化（2026-09-04）：原 476 行單文件按功能拆成上述模塊（教訓：單文件
@@ -117,26 +117,29 @@ ffmpegthumbnailer（視頻首幀）由 dnf 安裝，不入庫；插件本體在
 ~/.config/yazi/plugins 由 ya pkg 下載，清單記於 package.toml，新機先裝 yazi
 再 `ya pkg install` 復原。
 
-Ulauncher 是 GNOME Wayland 下的「小輸入框」啟動器（Super+R 呼出，替代
+Vicinae 是 GNOME Wayland 下的原生 C++/Qt 啟動器（Super+R 呼出，替代
 Super 概覽，視頻會議投屏不暴露已開窗口）。**Wayland 坑位**：普通應用不允許
-全局抓鍵，Preferences 裏的熱鍵字段（Ctrl+Space）是 X11 遺產、純擺設；實際
-熱鍵由 GNOME 自定義快捷鍵承擔（Super+R → `ulauncher-toggle`），駐留走
-systemd user service。這兩項在 dconf/systemd 側，不落文件，新機恢復：
+全局抓鍵，熱鍵由 GNOME 自定義快捷鍵承擔（Super+R → `vicinae toggle`），
+駐留走 systemd user service，配套 GNOME Shell 擴展（vicinae@dagimg-dot）
+經 D-Bus 暴露剪貼板與窗口管理（wm:switch-windows 等）。這三項不落文件，
+新機恢復：
 
 ```bash
 gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \
   "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/]"
-gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ name 'Ulauncher'
-gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ command 'ulauncher-toggle'
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ name 'Vicinae'
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ command 'vicinae toggle'
 gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ binding '<Super>r'
-systemctl --user enable --now ulauncher.service
+systemctl --user enable --now vicinae.service
+curl -sL -o /tmp/vicinae-ext.zip 'https://github.com/vicinaehq/gnome-extension/releases/latest/download/vicinae%40dagimg-dot.shell-extension.zip' \
+  && gnome-extensions install --force /tmp/vicinae-ext.zip  # 裝完註銷重登，在 Extensions 應用啟用
 ```
 
 另注意 GNOME 50 起 custom-keybinding 的 `binding` 鍵已改**純字符串**
 （`'<Super>r'`），寫舊數組格式 `"['<Super>r']"` 時 g-s-d 會把字面量整個
 傳給 Mutter 並**靜默**抓取失敗（僅 journal 可見 `not a valid accelerator`）。
-extensions.json（已裝擴展註冊表）與 `~/.local/share/ulauncher/` 屬 state，
-不入庫。
+腳本命令在 `~/.local/share/vicinae/scripts/`（由本倉庫 symlink 管理，索引器跟軟鏈）；
+vicinae.db／剪貼板庫／文件索引／主題／snippets 屬 state，不入庫。
 
 Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；实际配置
 位于 `~/.config/bash/`。命令历史属于 state，部署脚本会在目标尚不存在时
