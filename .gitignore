@@ -28,3 +28,6 @@ emacs/.emacs.d/tools/*.tar.gz
 
 # Yazi 只收配置與插件清單；插件本體由 ya pkg 下載（若被誤拷進包目錄亦忽略）
 yazi/.config/yazi/plugins/
+
+# Ulauncher 只收主配置；擴展註冊表 extensions.json 屬運行期 state（誤拷進包亦忽略）
+ulauncher/.config/ulauncher/extensions.json

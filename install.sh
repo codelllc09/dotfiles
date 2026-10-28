@@ -3,7 +3,7 @@
 # 新增包 = 建同名目录、按真实路径摆放文件、重跑本脚本。
 # 保护规则：目标处若已存在"真实文件"（非 symlink）则跳过并提示，
 # 先手动 mv 进包目录再重跑。
-# 需要手動安裝 curl tar xz fzf zoxide gpaste gnome-shell-extension-gpaste，例如在federa則執行`sudo install ...`
+# 需要手動安裝 curl tar xz fzf zoxide gpaste gnome-shell-extension-gpaste ulauncher，例如在federa則執行`sudo install ...`
 
 set -euo pipefail
 cd "$(dirname "$0")"
