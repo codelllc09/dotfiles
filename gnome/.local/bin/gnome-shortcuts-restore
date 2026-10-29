@@ -1,0 +1,40 @@
+#!/bin/bash
+# 恢复 dotfiles 管理的 GNOME 全局快捷键。幂等可重跑。
+# custom0: Super+R -> Vicinae
+# custom1: Ctrl+Print -> GNOME 交互式截圖完成後進入 Gradia
+set -euo pipefail
+
+media_schema=org.gnome.settings-daemon.plugins.media-keys
+shortcut_schema=org.gnome.settings-daemon.plugins.media-keys.custom-keybinding
+shortcut_base=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings
+vicinae_path="$shortcut_base/custom0/"
+gradia_path="$shortcut_base/custom1/"
+gradia_app=be.alexandervanhee.gradia
+
+for required_command in flatpak gsettings; do
+  if ! command -v "$required_command" >/dev/null 2>&1; then
+    echo "無法恢復 GNOME 快捷鍵：缺少命令 $required_command" >&2
+    exit 1
+  fi
+done
+
+if ! flatpak info "$gradia_app" >/dev/null 2>&1; then
+  flatpak install --user --noninteractive flathub "$gradia_app"
+  echo "已安裝 Gradia"
+else
+  echo "Gradia 已安裝，跳過"
+fi
+
+gsettings set "$media_schema" custom-keybindings \
+  "['$vicinae_path', '$gradia_path']"
+
+gsettings set "$shortcut_schema:$vicinae_path" name 'Vicinae'
+gsettings set "$shortcut_schema:$vicinae_path" command 'vicinae toggle'
+gsettings set "$shortcut_schema:$vicinae_path" binding '<Super>r'
+
+gsettings set "$shortcut_schema:$gradia_path" name 'Gradia Screenshot'
+gsettings set "$shortcut_schema:$gradia_path" command \
+  'flatpak run be.alexandervanhee.gradia --screenshot=INTERACTIVE'
+gsettings set "$shortcut_schema:$gradia_path" binding '<Primary>Print'
+
+echo '已恢復 GNOME 快捷鍵：Super+R（Vicinae）、Ctrl+Print（Gradia Screenshot）'

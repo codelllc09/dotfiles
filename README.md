@@ -20,6 +20,7 @@
 | 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底；斜體楷體用 LXGW WenKai Mono（GitHub lxgw/LxgwWenKai v1.530，手動下載至 ~/.local/share/fonts，不入庫） |
 | 文件管理器 | yazi 26.9.1（插件由 ya pkg 管理）+ swayimg 5.6 / ffmpegthumbnailer 2.3（dnf；畫廊式看圖與視頻首幀） |
 | 啟動器 | vicinae 0.29.2（Terra 倉庫；Wayland 熱鍵走 GNOME 自定義快捷鍵，見 vicinae 段） |
+| 截圖標註 | Gradia 1.14.0（Flathub；`Ctrl+Print` 走 GNOME 自定義快捷鍵，截圖後自動進入標註） |
 | 頂欄監控 | GNOME Shell 擴展 Astra Monitor v43（EGO 62；配置經 dconf 入庫，見 gnome 段） |
 
 ### 升級後檢查清單
@@ -88,6 +89,7 @@ vicinae/
 
 gnome/
   .config/gnome-extensions/astra-monitor.dconf → Astra Monitor 的 dconf 非默認鍵快照（dconf dump 產物，改設置後需重新 dump）
+  .local/bin/gnome-shortcuts-restore           → 安裝 Gradia 並恢復 Vicinae/Gradia 的 GNOME 全局快捷鍵
   .local/bin/astra-monitor-restore             → 一鍵恢復：裝擴展 → dconf load → 啓用（冪等）
 ```
 
@@ -126,19 +128,19 @@ Vicinae 是 GNOME Wayland 下的原生 C++/Qt 啟動器（Super+R 呼出，替�
 Super 概覽，視頻會議投屏不暴露已開窗口）。**Wayland 坑位**：普通應用不允許
 全局抓鍵，熱鍵由 GNOME 自定義快捷鍵承擔（Super+R → `vicinae toggle`），
 駐留走 systemd user service，配套 GNOME Shell 擴展（vicinae@dagimg-dot）
-經 D-Bus 暴露剪貼板與窗口管理（wm:switch-windows 等）。這三項不落文件，
-新機恢復：
+經 D-Bus 暴露剪貼板與窗口管理（wm:switch-windows 等）。服務與擴展不落文件；
+Vicinae 與 Gradia 的 GNOME 自定義快捷鍵由下列命令聲明，新機恢復：
 
 ```bash
-gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \
-  "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/]"
-gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ name 'Vicinae'
-gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ command 'vicinae toggle'
-gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ binding '<Super>r'
+~/.local/bin/gnome-shortcuts-restore
 systemctl --user enable --now vicinae.service
 curl -sL -o /tmp/vicinae-ext.zip 'https://github.com/vicinaehq/gnome-extension/releases/latest/download/vicinae%40dagimg-dot.shell-extension.zip' \
   && gnome-extensions install --force /tmp/vicinae-ext.zip  # 裝完註銷重登，在 Extensions 應用啟用
 ```
+
+`gnome-shortcuts-restore` 會在缺少時從 Flathub 安裝 Gradia，並以 custom0/custom1
+恢復兩個快捷鍵。Gradia 是截圖後編輯器：`Ctrl+Print` 先打開 GNOME 交互式選區，
+完成截圖後自動進入 Gradia 標註。應用本體由 Flathub 管理，不進倉庫。
 
 另注意 GNOME 50 起 custom-keybinding 的 `binding` 鍵已改**純字符串**
 （`'<Super>r'`），寫舊數組格式 `"['<Super>r']"` 時 g-s-d 會把字面量整個
