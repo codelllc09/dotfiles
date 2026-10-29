@@ -247,13 +247,7 @@ Each branch matches a regexp against `custom-enabled-themes'."
             :pill-fg "#cdd6f4"       ; text
             :accent "#7f849c"        ; overlay1
             :accent-hover "#89b4fa"  ; blue
-            :modified "#f9e2af"     ; peach
-            :vc-modified "#f9e2af"   ; yellow
-            :vc-added "#a6e3a1"      ; green
-            :vc-deleted "#f38ba8"    ; red
-            :vc-untracked "#89b4fa"     ; blue
-            :hl-line "#313244"           ; surface0
-            :hl-line-inactive "#292c3c")) ; surface0 dimmed
+            :modified "#f9e2af"))    ; peach
      ;; Next theme family: add a branch here, e.g.
      ;; ((string-match-p "nord" names) (list :bar-bg ... :modified ...))
      (t
@@ -261,43 +255,11 @@ Each branch matches a regexp against `custom-enabled-themes'."
       (list :bar-bg "#181825" :bar-fg "#6c7086"
             :pill-bg "#313244" :pill-fg "#cdd6f4"
             :accent "#7f849c" :accent-hover "#89b4fa"
-            :modified "#f9e2af"
-            :vc-modified "#f9e2af" :vc-added "#a6e3a1"
-            :vc-deleted "#f38ba8" :vc-untracked "#89b4fa"
-            :hl-line "#313244" :hl-line-inactive "#292c3c")))))
+            :modified "#f9e2af")))))
 
 (defun lcw-ui-color (key)
   "Convenience accessor for KEY in `lcw-ui-palette'."
   (plist-get (lcw-ui-palette) key))
-
-(defun lcw-apply-dirvish-faces ()
-  "Give Dirvish's current-line highlight a visible palette color.
-Catppuccin maps `highlight' to a background barely lighter than the
-buffer, which makes the selected line invisible.  Guarded with `facep'
-because Dirvish may not be loaded yet."
-  (let ((p (lcw-ui-palette)))
-    (dolist (spec '((dirvish-hl-line . :hl-line)
-                    (dirvish-hl-line-inactive . :hl-line-inactive)))
-      (when (facep (car spec))
-        (set-face-attribute (car spec) nil
-                            :background (plist-get p (cdr spec))
-                            :extend t)))))
-
-;; Git gutter faces for Dirvish's `vc-state' attribute (referenced from
-;; `dirvish-vc-state-face-alist' in init-project).  Colors follow the
-;; palette via `lcw-apply-ui-faces'.
-(defface lcw-vc-modified '((t :foreground "#f9e2af"))
-  "Dirvish git gutter: modified, unlocked, needs-update."
-  :group 'faces)
-(defface lcw-vc-added '((t :foreground "#a6e3a1"))
-  "Dirvish git gutter: locally added."
-  :group 'faces)
-(defface lcw-vc-deleted '((t :foreground "#f38ba8"))
-  "Dirvish git gutter: removed, missing, conflict, needs-merge."
-  :group 'faces)
-(defface lcw-vc-untracked '((t :foreground "#89b4fa"))
-  "Dirvish git gutter: unregistered files."
-  :group 'faces)
 
 ;; A tab-bar tab is a workspace/window layout. Its icon follows the buffer that
 ;; represents the workspace, like the program icon in the WezTerm tab title.
@@ -399,13 +361,7 @@ about keeping the rest of this function theme-synced."
                         :background bar-bg
                         :foreground bar-fg
                         :weight 'normal
-                        :box `(:line-width (6 . 3) :color ,bar-bg))
-    (dolist (spec '((lcw-vc-modified . :vc-modified)
-                    (lcw-vc-added . :vc-added)
-                    (lcw-vc-deleted . :vc-deleted)
-                    (lcw-vc-untracked . :vc-untracked)))
-      (set-face-attribute (car spec) nil :foreground (plist-get p (cdr spec))))
-    (lcw-apply-dirvish-faces))
+                        :box `(:line-width (6 . 3) :color ,bar-bg)))
   ;; Only the Agent Shell / vterm panel sets a header line now.
   (set-face-attribute 'header-line nil
                       :inherit 'mode-line-inactive

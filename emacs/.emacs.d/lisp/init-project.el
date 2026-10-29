@@ -193,35 +193,15 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
    '(vc-state subtree-state nerd-icons collapse file-time file-size))
   ;; `dirvish-side-attributes' defaults to a snapshot of
   ;; `dirvish-attributes' taken when dirvish-side loads, which happens
-  ;; before this :custom applies.  Set it explicitly: narrow tree gets
-  ;; colored filenames only (no letters, no time/size/collapse).
+  ;; before this :custom applies.  Set it explicitly, and keep only
+  ;; attributes that fit the narrow tree (no time/size/collapse).
   (dirvish-side-attributes '(vc-state subtree-state nerd-icons))
   (dirvish-use-header-line 'global)
   (dirvish-mode-line-bar-image-width 0)
   :config
   (require 'dirvish-history)
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-disable-legacy-icons)
-  (add-hook 'dirvish-setup-hook #'lcw-dirvish-sync-listing-switches)
-  (add-hook 'dirvish-setup-hook #'lcw-apply-dirvish-faces))
-
-;; Palette-driven git colors (faces defined in init-ui) plus a 3px solid
-;; gutter bar instead of the hairline 1px default bitmap.
-(with-eval-after-load 'dirvish-vc
-  (setq dirvish-vc-state-face-alist
-        '((up-to-date)
-          (edited . lcw-vc-modified)
-          (added . lcw-vc-added)
-          (removed . lcw-vc-deleted)
-          (missing . lcw-vc-deleted)
-          (needs-merge . lcw-vc-deleted)
-          (conflict . lcw-vc-deleted)
-          (unlocked-changes . lcw-vc-modified)
-          (needs-update . lcw-vc-modified)
-          (ignored)
-          (unregistered . lcw-vc-untracked))
-  ;; 3px solid gutter bar instead of the hairline 1px default bitmap.
-  (define-fringe-bitmap 'dirvish-vc-gutter [255 255 255] nil 3 '(center repeated))))
-
+  (add-hook 'dirvish-setup-hook #'lcw-dirvish-sync-listing-switches))
 
 ;; dired-subtree expanded subdirectories in place inside plain Dired
 ;; buffers; it served the retired left Dired panel.  Dirvish ships its own
