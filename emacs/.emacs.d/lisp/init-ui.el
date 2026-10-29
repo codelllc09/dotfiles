@@ -500,13 +500,20 @@ nord, gruvbox, solarized-dark, github-dark.")
   "Apply the code font to graphical FRAME without changing its font size."
   (let ((frame (or frame (selected-frame))))
     (when (display-graphic-p frame)
-      (when (find-font (font-spec :family lcw-code-font-family) frame)
-        (set-face-attribute 'default frame :family lcw-code-font-family)
-        (set-face-attribute 'fixed-pitch frame :family lcw-code-font-family)
-        (dolist (script '(han kana cjk-misc bopomofo))
-          (set-fontset-font t script
-                            (font-spec :family lcw-code-font-family)
-                            frame))))))
+      ;; Set the family unconditionally: `find-font' consults Emacs's own font
+      ;; cache, which can lag behind fontconfig after a font install/update.
+      ;; Skipping the assignment then leaves the whole frame on a fallback
+      ;; proportional font.  If the family really is missing the renderer just
+      ;; falls back per character.
+      (unless (find-font (font-spec :family lcw-code-font-family) frame)
+        (message "lcw: font %s not in the font cache; setting it anyway"
+                 lcw-code-font-family))
+      (set-face-attribute 'default frame :family lcw-code-font-family)
+      (set-face-attribute 'fixed-pitch frame :family lcw-code-font-family)
+      (dolist (script '(han kana cjk-misc bopomofo))
+        (set-fontset-font t script
+                          (font-spec :family lcw-code-font-family)
+                          frame)))))
 
 (add-hook 'after-make-frame-functions #'lcw-apply-code-font)
 (lcw-apply-code-font)
