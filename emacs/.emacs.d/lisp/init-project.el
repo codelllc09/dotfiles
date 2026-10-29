@@ -240,7 +240,7 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
 
 (defface lcw-git-mark-modified '((t :foreground "#89b4fa"))
   "Fringe mark: worktree changes are not staged.
-Blue rather than orange on purpose: against the green "staged" bar,
+Blue rather than orange on purpose: against the green staged bar,
 green/orange collapses to dE 11 under deuteranopia and protanopia,
 while green/blue stays at dE 66-69."
   :group 'lcw-dirvish)
