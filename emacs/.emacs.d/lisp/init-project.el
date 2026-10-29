@@ -219,6 +219,10 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
 ;;   |   orange  worktree changes not staged (Y column dirty)
 ;;   i   dim     ignored (!!) -- same look as before
 ;;   -           clean / committed
+;;
+;; Queries run asynchronously (like dirvish/diff-hl/magit) with a short-lived
+;; per-directory cache: Dirvish fires several refresh hooks per navigation
+;; and opens preview panes, so the same directory is queried repeatedly.
 
 (defgroup lcw-dirvish nil
   "Local Dired and Dirvish tweaks."
@@ -240,6 +244,19 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
   "Fringe mark: file is ignored by git."
   :group 'lcw-dirvish)
 
+(defcustom lcw-git-mark-cache-ttl 0.5
+  "Seconds a directory's git status may be reused.
+Long enough to collapse the several refresh hooks Dirvish fires for one
+navigation, short enough that `g' shows the effect of staging a file."
+  :type 'number
+  :group 'lcw-dirvish)
+
+(defvar lcw-git-mark-cache (make-hash-table :test #'equal)
+  "Directory -> (TIMESTAMP . ENTRIES), used by the refresh hooks.")
+
+(defvar lcw-git-mark-inflight (make-hash-table :test #'equal)
+  "Directory -> running process, so one query per directory is in flight.")
+
 (defvar-local lcw-git-mark-overlays nil
   "Overlays drawn by `lcw-git-mark-refresh' in this buffer.")
 
@@ -253,59 +270,134 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
     ;; Small "i" (same shape diff-hl uses for ignored entries).
     (define-fringe-bitmap 'lcw-git-bmp-i [3 3 0 3 3 3 3 3 3 3] nil 2 'center)))
 
-(defun lcw-git-status (dir)
-  "Return ((RELATIVE-NAME . KIND) ...) for DIR.
+(defun lcw-git-command ()
+  "Return the git argv used for status queries.
+`--no-optional-locks' stops status from refreshing and writing
+`.git/index', so it never competes with another git command for the
+index lock."
+  (list "git" "--no-optional-locks" "status" "--porcelain=v1" "-z" "--ignored"))
+
+(defun lcw-git-parse-status (string)
+  "Parse STRING from `lcw-git-command' into ((FILE . KIND) ...).
 KIND is `untracked', `staged', `modified' or `ignored'."
+  (let ((fields (split-string string "\0" t))
+        entries)
+    (while fields
+      (let* ((entry (pop fields))
+             (xy (substring entry 0 2))
+             (path (substring entry 3)))
+        ;; Renames and copies carry the original path as the next field.
+        (when (memq (aref xy 0) '(?R ?C))
+          (pop fields))
+        (push (cons path
+                    (cond ((equal xy "??") 'untracked)
+                          ((equal xy "!!") 'ignored)
+                          ;; Y column dirty => worktree changes remain.
+                          ((not (eq (aref xy 1) ?\s)) 'modified)
+                          (t 'staged)))
+              entries)))
+    (nreverse entries)))
+
+(defun lcw-git-status-sync (dir)
+  "Return git entries for DIR, or nil when DIR is remote or not a repo."
   (when (and (not (file-remote-p dir)) (executable-find "git"))
     (with-temp-buffer
-      (when (eq 0 (process-file "git" nil t nil
-                                "status" "--porcelain=v1" "-z" "--ignored"))
-        (let ((fields (split-string (buffer-string) "\0" t))
-              entries)
-          (while fields
-            (let* ((entry (pop fields))
-                   (xy (substring entry 0 2))
-                   (path (substring entry 3)))
-              ;; Renames and copies carry the original path as the next field.
-              (when (memq (aref xy 0) '(?R ?C))
-                (pop fields))
-              (push (cons path
-                          (cond ((equal xy "??") 'untracked)
-                                ((equal xy "!!") 'ignored)
-                                ;; Y column dirty => worktree changes remain.
-                                ((not (eq (aref xy 1) ?\s)) 'modified)
-                                (t 'staged)))
-                    entries)))
-          entries)))))
+      (let ((default-directory (file-name-as-directory (expand-file-name dir))))
+        (when (eq 0 (apply #'process-file (car (lcw-git-command)) nil t nil
+                           (cdr (lcw-git-command))))
+          (lcw-git-parse-status (buffer-string)))))))
+
+(defun lcw-git-status-sentinel (process _event)
+  "Record and draw the git status PROCESS just fetched."
+  (when (memq (process-status process) '(exit signal))
+    (let* ((dir (process-get process 'lcw-git-dir))
+           (callback (process-get process 'lcw-git-callback))
+           (buffer (process-buffer process))
+           (ok (and (eq (process-status process) 'exit)
+                    (zerop (process-exit-status process))))
+           entries)
+      (when (and ok (buffer-live-p buffer))
+        (with-current-buffer buffer
+          (setq entries (lcw-git-parse-status (buffer-string)))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (remhash dir lcw-git-mark-inflight)
+      (when entries
+        (puthash dir (cons (float-time) entries) lcw-git-mark-cache)
+        (ignore-errors (funcall callback entries))))))
+
+(defun lcw-git-status-async (dir callback)
+  "Query git status for DIR and call CALLBACK with the entries.
+Entries are also put in `lcw-git-mark-cache'.  Duplicate concurrent
+queries for the same DIR are dropped."
+  (cond
+   ((gethash dir lcw-git-mark-inflight) nil)
+   ((or (file-remote-p dir) (not (executable-find "git"))) nil)
+   (t
+    (let* ((default-directory (file-name-as-directory (expand-file-name dir)))
+           (buffer (generate-new-buffer " *lcw-git-status*"))
+           (proc
+            (make-process
+             :name "lcw-git-status"
+             :buffer buffer
+             :connection-type 'pipe
+             :noquery t
+             :command (lcw-git-command)
+             :sentinel #'lcw-git-status-sentinel)))
+      ;; Carry the context on the process object: the sentinel then needs no
+      ;; closure of its own to resolve DIR, the output buffer, or CALLBACK.
+      (process-put proc 'lcw-git-dir dir)
+      (process-put proc 'lcw-git-callback callback)
+      (puthash dir proc lcw-git-mark-inflight)))))
+
+(defun lcw-git-mark-draw (entries)
+  "Draw fringe marks for ENTRIES in the current Dired/Dirvish buffer."
+  (mapc #'delete-overlay lcw-git-mark-overlays)
+  (setq lcw-git-mark-overlays nil)
+  (let ((dir default-directory))
+    (dolist (entry entries)
+      (let* ((file (car entry))
+             (kind (cdr entry))
+             (face (pcase kind
+                     ('untracked 'lcw-git-mark-untracked)
+                     ('staged 'lcw-git-mark-staged)
+                     ('modified 'lcw-git-mark-modified)
+                     ('ignored 'lcw-git-mark-ignored)))
+             (bmp (pcase kind
+                    ('untracked 'lcw-git-bmp-u)
+                    ('ignored 'lcw-git-bmp-i)
+                    (_ 'lcw-git-bmp-bar))))
+        (save-excursion
+          (when (dired-goto-file (expand-file-name file dir))
+            (let ((ov (make-overlay (line-beginning-position)
+                                    (line-beginning-position))))
+              (overlay-put ov 'before-string
+                           (propertize " " 'display `(left-fringe ,bmp ,face)))
+              (overlay-put ov 'evaporate t)
+              (push ov lcw-git-mark-overlays))))))))
 
 (defun lcw-git-mark-refresh (&rest _)
-  "Draw git status marks in the current Dired/Dirvish buffer."
+  "Refresh git status marks in the current Dired/Dirvish buffer.
+Uses cached data when it is younger than `lcw-git-mark-cache-ttl',
+draws stale data immediately, and always revalidates asynchronously."
   (when (and (derived-mode-p 'dired-mode) (display-graphic-p))
     (lcw-git-define-bitmaps)
-    (mapc #'delete-overlay lcw-git-mark-overlays)
-    (setq lcw-git-mark-overlays nil)
-    (let ((dir default-directory))
-      (dolist (entry (lcw-git-status dir))
-        (let* ((file (car entry))
-               (kind (cdr entry))
-               (face (pcase kind
-                       ('untracked 'lcw-git-mark-untracked)
-                       ('staged 'lcw-git-mark-staged)
-                       ('modified 'lcw-git-mark-modified)
-                       ('ignored 'lcw-git-mark-ignored)))
-               (bmp (pcase kind
-                      ('untracked 'lcw-git-bmp-u)
-                      ('ignored 'lcw-git-bmp-i)
-                      (_ 'lcw-git-bmp-bar))))
-          (save-excursion
-            (when (dired-goto-file (expand-file-name file dir))
-              (let ((ov (make-overlay (line-beginning-position)
-                                      (line-beginning-position))))
-                (overlay-put ov 'before-string
-                             (propertize " " 'display
-                                         `(left-fringe ,bmp ,face)))
-                (overlay-put ov 'evaporate t)
-                (push ov lcw-git-mark-overlays)))))))))
+    (let* ((buffer (current-buffer))
+           (dir (expand-file-name default-directory))
+           (cached (gethash dir lcw-git-mark-cache))
+           (fresh (and cached
+                       (< (- (float-time) (car cached))
+                          lcw-git-mark-cache-ttl))))
+      (when cached
+        (lcw-git-mark-draw (cdr cached)))
+      (unless fresh
+        (lcw-git-status-async
+         dir
+         (lambda (entries)
+           (when (buffer-live-p buffer)
+             (with-current-buffer buffer
+               (when (equal (expand-file-name default-directory) dir)
+                 (lcw-git-mark-draw entries))))))))))
 
 (add-hook 'dired-after-readin-hook #'lcw-git-mark-refresh)
 (with-eval-after-load 'dirvish
