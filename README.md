@@ -20,6 +20,7 @@
 | 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底；斜體楷體用 LXGW WenKai Mono（GitHub lxgw/LxgwWenKai v1.530，手動下載至 ~/.local/share/fonts，不入庫） |
 | 文件管理器 | yazi 26.9.1（插件由 ya pkg 管理）+ swayimg 5.6 / ffmpegthumbnailer 2.3（dnf；畫廊式看圖與視頻首幀） |
 | 啟動器 | vicinae 0.29.2（Terra 倉庫；Wayland 熱鍵走 GNOME 自定義快捷鍵，見 vicinae 段） |
+| 頂欄監控 | GNOME Shell 擴展 Astra Monitor v43（EGO 62；配置經 dconf 入庫，見 gnome 段） |
 
 ### 升級後檢查清單
 
@@ -84,6 +85,10 @@ yazi/
 vicinae/
   .config/vicinae/dotfiles.json       → 我們的基礎配置（遙測關/緊湊模式/無時鐘），經 settings.json 的 imports 引入
   .local/share/vicinae/scripts/       → 腳本命令：\gh/\bili/\tr 網搜（反斜杠前綴避免搶排名）（@vicinae.* 註解式，percentEncoded）
+
+gnome/
+  .config/gnome-extensions/astra-monitor.dconf → Astra Monitor 的 dconf 非默認鍵快照（dconf dump 產物，改設置後需重新 dump）
+  .local/bin/astra-monitor-restore             → 一鍵恢復：裝擴展 → dconf load → 啓用（冪等）
 ```
 
 v4 模塊化（2026-09-04）：原 476 行單文件按功能拆成上述模塊（教訓：單文件
@@ -146,6 +151,17 @@ GUI 改的值落在 settings.json 且優先級高於 imports。主題在 GUI 裏
 vicinae.db／剪貼板庫／文件索引／主題／snippets 屬 state，不入庫。
 商店擴展同屬 state（~/.local/share/vicinae/extensions/），但已裝清單在此登記，
 新機從 store 重裝：**Process Manager、Systemd、Kill Port**（2026-10-29 裝）。
+
+頂欄監控用 GNOME Shell 擴展 **Astra Monitor**（`monitor@astraext.github.io`）。
+配置不在文件而在 dconf 數據庫，倉庫只存非默認鍵快照
+（`gnome/.config/gnome-extensions/astra-monitor.dconf`，`dconf dump` 產物）。
+佈局取「緊湊」取向：CPU 圖標+20px 曲線、內存百分比（剩餘 <1.5GB 圖標變紅告警）、
+磁盤 IO 速度+20px 曲線；GPU/傳感器/網絡模塊關閉，各實時條關閉。
+新機恢復：`~/.local/bin/astra-monitor-restore`（裝擴展 → dconf load → 啓用；
+首次安裝需註銷重登讓 Shell 掃描）。改了擴展設置後同步倉庫：
+`dconf dump /org/gnome/shell/extensions/astra-monitor/ > ~/dotfiles/gnome/.config/gnome-extensions/astra-monitor.dconf`
+。查 iowait：點頂欄 CPU 區開菜單，懸停 User/System 行彈出
+「CPU Category Usage Raw Info」，I/O wait 持續 >5% 即 IO 瓶頸信號。
 
 Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；实际配置
 位于 `~/.config/bash/`。命令历史属于 state，部署脚本会在目标尚不存在时

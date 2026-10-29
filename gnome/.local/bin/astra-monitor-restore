@@ -1,0 +1,33 @@
+#!/bin/bash
+# 恢复 Astra Monitor（GNOME 顶栏系统监控扩展）本体与配置。幂等可重跑。
+# 流程：扩展未装则从 EGO 下载安装 → dconf load 覆盖写配置 → 启用。
+# 配置快照基于 v43（EGO 62）/ GNOME Shell 50.4。
+set -euo pipefail
+
+UUID=monitor@astraext.github.io
+DCONF_PATH=/org/gnome/shell/extensions/astra-monitor/
+CONF_FILE="$(dirname "$(readlink -f "$0")")/../../.config/gnome-extensions/astra-monitor.dconf"
+
+# 1) 扩展本体
+if ! gnome-extensions info "$UUID" >/dev/null 2>&1; then
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  curl --fail --location --retry 3 \
+    --output "$tmp/astra.zip" \
+    "https://extensions.gnome.org/download-extension/${UUID}.shell-extension.zip"
+  gnome-extensions install --force "$tmp/astra.zip"
+  echo "已安装扩展 $UUID"
+else
+  echo "扩展已安装，跳过下载"
+fi
+
+# 2) 配置（只覆盖 dump 里的非默认键）
+dconf load "$DCONF_PATH" < "$CONF_FILE"
+echo "已写入 dconf 配置"
+
+# 3) 启用（首次安装后 Shell 可能尚未扫描，注销重登后重跑本脚本即可）
+if gnome-extensions enable "$UUID" 2>/dev/null; then
+  echo "已启用：gnome-extensions info $UUID 应显示 ACTIVE"
+else
+  echo "提示：Shell 尚未识别新装的扩展，注销重新登录后再跑一次本脚本"
+fi
