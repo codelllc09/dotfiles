@@ -38,6 +38,13 @@
 (when (< emacs-major-version 31)
   (add-to-list 'native-comp-jit-compilation-deny-list
                "/agent-shell\\(?:-[^/]+\\)?/agent-shell\\.el\\'"))
+
+;; The async native compiler re-reports unresolved cross-package references
+;; (Dirvish side panel, consult, doom-themes glue, ...) whenever the eln cache
+;; is rebuilt.  Every one of them is a known load-order coupling, so keep the
+;; reports out of *Warnings*; they are still recorded in
+;; *Async Native Compile Log*.
+(setq native-comp-async-report-warnings-errors 'silent)
 ;; Local configuration modules and pinned code not distributed through ELPA.
 (add-to-list 'load-path (expand-file-name "lisp" user-emacs-directory))
 (add-to-list 'load-path
@@ -89,11 +96,16 @@
     (setenv "PATH" (concat tool-dir path-separator (getenv "PATH")))))
 
 ;; Each package has one owning module. The order makes shared facilities such
-;; as completion and projects available before programming integrations load.
+;; as completion and projects available before programming integrations load;
+;; init-docs/init-dashboard/init-terminal sit after the modules whose
+;; commands and faces they consume (see each file's header).
 (dolist (module '(init-minibuffer
                   init-editing
+                  init-docs
                   init-ui
                   init-project
+                  init-dashboard
+                  init-terminal
                   init-agent
                   init-programming
                   init-doctor))

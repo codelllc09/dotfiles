@@ -1,5 +1,10 @@
 ;;; init-minibuffer.el --- Minibuffer completion and navigation -*- lexical-binding: t; -*-
 
+(declare-function consult-xref "consult.el")
+(declare-function consult--frame-buffer-list "consult.el")
+(declare-function consult--buffer-query "consult.el")
+(declare-function consult--buffer-pair "consult.el")
+
 ;; Show the current and total match counts while incrementally searching.
 (setq isearch-lazy-count t
       lazy-count-prefix-format "%s/%s "

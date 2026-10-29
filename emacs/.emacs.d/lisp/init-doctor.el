@@ -2,6 +2,8 @@
 
 (require 'cl-lib)
 (require 'package)
+
+(declare-function treesit-ready-p "treesit.c")
 (require 'seq)
 (require 'tabulated-list)
 

@@ -67,9 +67,12 @@ bash/
 emacs/
   .emacs.d/init.el                    → ~/.emacs.d/init.el（啟動、套件清單、模組載入）
   .emacs.d/lisp/init-minibuffer.el    → minibuffer 補全、搜尋與候選操作
-  .emacs.d/lisp/init-editing.el       → 一般編輯、buffer 補全、Markdown、PDF
-  .emacs.d/lisp/init-ui.el            → Tab Line、工作區、主題、字體與圖標
-  .emacs.d/lisp/init-project.el       → project、Dired、Magit、會話與 IDE 面板
+  .emacs.d/lisp/init-editing.el       → 一般編輯行為與 in-buffer 工具（snippets、Corfu、paredit）
+  .emacs.d/lisp/init-docs.el          → 長文檔格式：Markdown（含表格預覽、Dirvish 預覽 hook）與 PDF
+  .emacs.d/lisp/init-ui.el            → frame 視覺：modeline、Tab Bar、主題、字體與圖標
+  .emacs.d/lisp/init-project.el       → project、Dired、Magit、會話恢復
+  .emacs.d/lisp/init-dashboard.el     → 啟動螢幕（Restore 按鈕依賴 init-project 的會話恢復）
+  .emacs.d/lisp/init-terminal.el      → 專案終端面板（Vterm，C-x w t）與 ansi-color
   .emacs.d/lisp/init-programming.el   → Tree-sitter、Eglot、格式化、測試與除錯
   .emacs.d/snippets/                  → 個人 YASnippet 模板
   .emacs.d/tools/                     → Node/Python 工具的可重建版本清單

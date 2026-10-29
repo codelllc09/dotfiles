@@ -1,4 +1,4 @@
-;;; init-project.el --- Projects, files, and workspaces -*- lexical-binding: t; -*-
+;;; init-project.el --- Project navigation, file browsing (Dired/Dirvish), version control (Magit/diff-hl), and session restore -*- lexical-binding: t; -*-
 
 ;; Projects use the built-in C-x p prefix. init-programming configures Eglot.
 (use-package project
@@ -83,6 +83,22 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
   ;; like the VSCode explorer sidebar.
   (require 'dirvish-side)
   (dirvish-side-follow-mode 1))
+
+;; Compiling this file needs Dirvish loaded: `lcw-dirvish-toggle-hidden-files'
+;; uses `(setf (dv-ls-switches ...))', and without the struct's setf expander
+;; on the compiler side the emitted code calls a `(setf dv-ls-switches)'
+;; function that cl-defstruct never defines -> void-function at runtime.
+;; `batch-byte-compile' does not execute the file body, so the runtime
+;; `require' block above does not help the compiler - only this does.
+(eval-when-compile
+  (when (locate-library "dirvish")
+    (require 'dirvish)
+    (when (locate-library "dirvish-side")
+      (require 'dirvish-side))))
+(declare-function nerd-icons-dired-mode "nerd-icons-dired.el")
+(declare-function dirvish-side "dirvish-side.el")
+(declare-function dirvish-side-follow-mode "dirvish-side.el")
+(declare-function lcw-disable-tab-line-in-all-buffers "init-ui.el")
 
 (defun lcw-dirvish-listing-shows-hidden-p (switches)
   "Return non-nil when ls SWITCHES include hidden files."
@@ -174,18 +190,60 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
          ("M-b" . dirvish-history-go-backward))
   :custom
   (dirvish-attributes
-   '(vc-state subtree-state nerd-icons collapse file-time file-size))
+   '(subtree-state nerd-icons collapse file-time file-size
+     lcw-vc-filename-face lcw-vc-badge))
   ;; `dirvish-side-attributes' defaults to a snapshot of
   ;; `dirvish-attributes' taken when dirvish-side loads, which happens
-  ;; before this :custom applies.  Set it explicitly, and keep only
-  ;; attributes that fit the narrow tree (no time/size/collapse).
-  (dirvish-side-attributes '(vc-state subtree-state nerd-icons))
+  ;; before this :custom applies.  Set it explicitly: narrow tree gets
+  ;; colored filenames only (no letters, no time/size/collapse).
+  (dirvish-side-attributes '(subtree-state nerd-icons lcw-vc-filename-face))
   (dirvish-use-header-line 'global)
   (dirvish-mode-line-bar-image-width 0)
   :config
   (require 'dirvish-history)
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-disable-legacy-icons)
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-sync-listing-switches))
+
+;; VS Code style git indicators: palette-driven colors (init-ui) applied to
+;; the filename itself plus a status letter right after it (M/A/U/D/C).
+(with-eval-after-load 'dirvish-vc
+  (setq dirvish-vc-state-face-alist
+        '((up-to-date)
+          (edited . lcw-vc-modified)
+          (added . lcw-vc-added)
+          (removed . lcw-vc-deleted)
+          (missing . lcw-vc-deleted)
+          (needs-merge . lcw-vc-deleted)
+          (conflict . lcw-vc-deleted)
+          (unlocked-changes . lcw-vc-modified)
+          (needs-update . lcw-vc-modified)
+          (ignored)
+          (unregistered . lcw-vc-untracked))))
+
+(when (locate-library "dirvish")
+  (defconst lcw-vc-state-letter-alist
+    '((edited . "M") (unlocked-changes . "M") (needs-update . "M")
+      (added . "A") (unregistered . "U")
+      (removed . "D") (missing . "D")
+      (needs-merge . "C") (conflict . "C"))
+    "Git state -> VS Code style status letter.")
+
+  (dirvish-define-attribute lcw-vc-filename-face
+    "Tint the filename with its git state color."
+    :when (and (symbolp (dirvish-prop :vc-backend)) (not (dirvish-prop :remote)))
+    (when-let* ((state (dirvish-attribute-cache f-name :vc-state))
+                (face (alist-get state dirvish-vc-state-face-alist))
+                (ov (make-overlay f-beg f-end)))
+      (overlay-put ov 'face face)
+      `(ov . ,ov)))
+
+  (dirvish-define-attribute lcw-vc-badge
+    "Show a status letter right after the filename."
+    :when (and (symbolp (dirvish-prop :vc-backend)) (not (dirvish-prop :remote)))
+    (when-let* ((state (dirvish-attribute-cache f-name :vc-state))
+                (face (alist-get state dirvish-vc-state-face-alist))
+                (letter (alist-get state lcw-vc-state-letter-alist)))
+      `(left . ,(propertize (format " %s" letter) 'face face)))))
 
 ;; dired-subtree expanded subdirectories in place inside plain Dired
 ;; buffers; it served the retired left Dired panel.  Dirvish ships its own
@@ -227,114 +285,7 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
       (expand-file-name (project-root project))
     (expand-file-name default-directory)))
 
-(defun lcw-panel-window (kind)
-  "Return the visible panel window of KIND in the selected frame."
-  (seq-find (lambda (window)
-              (eq (window-parameter window 'lcw-panel) kind))
-            (window-list (selected-frame))))
-
-(defun lcw-toggle-panel (kind root buffer side size)
-  "Toggle or focus the KIND panel for ROOT showing BUFFER.
-Place a new panel on SIDE using SIZE as its width or height."
-  (let ((window (lcw-panel-window kind)))
-    (cond
-     ((and window
-           (eq window (selected-window))
-           (equal root (window-parameter window 'lcw-panel-root)))
-      (delete-window window))
-     (window
-      (set-window-dedicated-p window nil)
-      (set-window-buffer window buffer)
-      (set-window-parameter window 'lcw-panel-root root)
-      (set-window-dedicated-p window t)
-      (select-window window))
-     (t
-      (setq window
-            (display-buffer-in-side-window
-             buffer
-             `((side . ,side)
-               (slot . 0)
-               (,(if (eq side 'bottom) 'window-height 'window-width)
-                . ,size))))
-      (set-window-parameter window 'lcw-panel kind)
-      (set-window-parameter window 'lcw-panel-root root)
-      (set-window-dedicated-p window t)
-      (select-window window)))
-    ;; Terminal output already supports keyboard scrolling. Keep its dedicated
-    ;; side window visually clean without changing scroll bars elsewhere.
-    (when (and (eq kind 'terminal) (window-live-p window))
-      (set-window-scroll-bars window nil nil nil nil t))
-    window))
-
-(use-package vterm
-  :if (locate-library "vterm")
-  :commands vterm-mode
-  :custom
-  (vterm-max-scrollback 10000)
-  (vterm-kill-buffer-on-exit t))
-
-(defun lcw-vterm-process-environment ()
-  "Return an environment without inherited WezTerm-only integration flags."
-  (seq-remove
-   (lambda (entry)
-     (string-match-p
-      "\\`\\(?:WEZTERM_[^=]*\\|TERM_PROGRAM\\(?:_VERSION\\)?\\)=" entry))
-   process-environment))
-
-(defun lcw-vterm-header-line ()
-  "Return the contextual header used by the bottom Vterm panel."
-  (list
-   " "
-   (propertize
-    (format "%s VTERM  %s"
-            (if (fboundp 'nerd-icons-codicon)
-                (substring-no-properties
-                 (nerd-icons-codicon "nf-cod-terminal"))
-              ">_")
-            (abbreviate-file-name default-directory))
-    'face 'lcw-terminal-header-label)
-   mode-line-format-right-align
-   (propertize "C-x w t  close " 'face 'lcw-terminal-header-hint)))
-
-(defun lcw-project-vterm-buffer (root)
-  "Return a live Vterm buffer rooted at ROOT."
-  (require 'vterm)
-  (let* ((project-name
-          (file-name-nondirectory (directory-file-name root)))
-         (terminal-name
-          (format "*vterm:%s-%s*" project-name
-                  (substring (secure-hash 'sha1 root) 0 7)))
-         (buffer (get-buffer terminal-name)))
-    (unless (and (buffer-live-p buffer)
-                 (process-live-p (get-buffer-process buffer)))
-      (when (buffer-live-p buffer)
-        (kill-buffer buffer))
-      (setq buffer (get-buffer-create terminal-name))
-      (with-current-buffer buffer
-        (setq default-directory root)
-        (let ((process-environment (lcw-vterm-process-environment)))
-          (vterm-mode))
-        (setq-local vertical-scroll-bar nil
-                    horizontal-scroll-bar nil
-                    header-line-format '((:eval (lcw-vterm-header-line))))))
-    buffer))
-
-(defun lcw-toggle-terminal-panel ()
-  "Open, focus, or close a Vterm panel for the current project."
-  (interactive)
-  (let ((root (lcw-project-root-or-default)))
-    (lcw-toggle-panel 'terminal root (lcw-project-vterm-buffer root)
-                      'bottom 0.30)))
-
 (keymap-set window-prefix-map "f" #'dirvish-side)
-(keymap-set window-prefix-map "t" #'lcw-toggle-terminal-panel)
-
-;; Translate ANSI colors from compilers, test runners, and package scripts.
-(use-package ansi-color
-  :ensure nil
-  :custom
-  (ansi-color-for-compilation-mode t)
-  :hook (compilation-filter . ansi-color-compilation-filter))
 
 ;; Save and restore workspaces and buffers between interactive sessions.
 (defun lcw-desktop-ignore-tab-line (&rest _buffer-locals)
