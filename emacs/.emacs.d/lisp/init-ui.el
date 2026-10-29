@@ -114,6 +114,14 @@ Indirect buffers inherit the file identity of their base buffer."
   '((t (:foreground "#6c7086")))
   "Face for the quiet directory segment of the mode line.")
 
+(defface lcw-mode-line-focus
+  '((t (:background "#89b4fa" :foreground "#11111b" :weight bold)))
+  "Face for the explicit selected-window badge in the mode line.")
+
+(defface lcw-focus-line
+  '((t (:background "#2a2b3c" :extend t)))
+  "Current-line face used only in the selected editing window.")
+
 (defun lcw-copy-current-file-path ()
   "Copy the current buffer's complete local or TRAMP file path."
   (interactive)
@@ -159,6 +167,30 @@ The full path is shown in the tooltip and copied on mouse-1."
                   'mouse-face 'mode-line-highlight
                   'local-map lcw-mode-line-path-map))))
 
+(defun lcw-mode-line-focus-indicator ()
+  "Return a fixed-width badge that is visible only in the selected window."
+  (if (mode-line-window-selected-p)
+      (propertize " FOCUS " 'face 'lcw-mode-line-focus)
+    ;; Preserve the layout when focus moves so the file name never jumps.
+    (propertize "       " 'face 'mode-line-inactive)))
+
+;; A content-level cue is much easier to locate than a mode-line color alone.
+;; Keep it to editing buffers: Dirvish already highlights its selected row,
+;; and terminals/special buffers should retain their own presentation.
+(defun lcw-enable-focus-line ()
+  "Highlight point in the selected editing window only."
+  (setq-local hl-line-face 'lcw-focus-line
+              hl-line-sticky-flag nil)
+  (hl-line-mode 1))
+
+(use-package hl-line
+  :ensure nil)
+
+;; Run after the older generic `hl-line-mode' hook in init-editing, so our
+;; selected-window face cannot be replaced by the theme default afterwards.
+(dolist (hook '(prog-mode-hook text-mode-hook conf-mode-hook))
+  (add-hook hook #'lcw-enable-focus-line 90))
+
 ;; `doom-modeline' replaces the hand-written bottom line.  The layout is
 ;; Centaur's, plus the directory segment above so that the file identity the
 ;; header line used to carry stays visible.
@@ -166,6 +198,7 @@ The full path is shown in the tooltip and copied on mouse-1."
   :if (locate-library "doom-modeline")
   :custom
   (doom-modeline-height 28)
+  (doom-modeline-bar-width 6)
   (doom-modeline-icon t)
   (doom-modeline-major-mode-icon t)
   (doom-modeline-major-mode-color-icon t)
@@ -177,9 +210,11 @@ The full path is shown in the tooltip and copied on mouse-1."
   (doom-modeline-buffer-file-name-style 'truncate-with-project)
   :hook (after-init . lcw-enable-doom-modeline)
   :config
+  (doom-modeline-def-segment lcw-focus
+    (lcw-mode-line-focus-indicator))
   (doom-modeline-def-segment lcw-directory (lcw-mode-line-directory))
   (doom-modeline-def-modeline 'main
-    '(bar window-number matches buffer-info remote-host lcw-directory
+    '(bar lcw-focus window-number matches buffer-info remote-host lcw-directory
           buffer-position selection-info)
     '(misc-info project-name lsp minor-modes buffer-encoding
       major-mode process vcs check)))
@@ -190,34 +225,47 @@ The full path is shown in the tooltip and copied on mouse-1."
   (lcw-apply-doom-modeline-faces))
 
 (defun lcw-apply-doom-modeline-faces ()
-  "Tint the mode line with the Catppuccin Mocha palette."
+  "Tint the mode line and make the selected window unmistakable."
   ;; Theme reloads call this before `doom-modeline' is loaded, and the faces
   ;; only exist once its core is available.
   (when (require 'doom-modeline-core nil t)
+    ;; Keep the bar itself quiet.  Focus is already explicit through the blue
+    ;; leading stripe, the FOCUS badge and the selected-window line highlight;
+    ;; brightening the complete mode line turns single-window screens (notably
+    ;; Dashboard) into a heavy horizontal banner.  `mode-line-active' is what
+    ;; current Doom Modeline uses on Emacs 30, while `mode-line' is the fallback.
     (set-face-attribute 'mode-line nil
-                        :background "#181825" :foreground "#a6adc8" :box nil)
+                        :background "#181825" :foreground "#a6adc8"
+                        :overline 'unspecified :box nil)
+    (when (facep 'mode-line-active)
+      (set-face-attribute 'mode-line-active nil
+                          :background "#181825" :foreground "#a6adc8"
+                          :overline 'unspecified :box nil))
     (set-face-attribute 'mode-line-inactive nil
-                        :background "#181825" :foreground "#585b70" :box nil)
+                        :background "#11111b" :foreground "#585b70"
+                        :overline 'unspecified :box nil)
     (set-face-attribute 'doom-modeline-bar nil
-                        :background "#89b4fa" :foreground "#181825")
+                        :background "#89b4fa" :foreground "#313244")
     (set-face-attribute 'doom-modeline-bar-inactive nil
-                        :background "#45475a" :foreground "#181825")
+                        :background "#313244" :foreground "#11111b")
+    ;; Segment faces must leave their background transparent; otherwise their
+    ;; old hardcoded mantle color masks the active/inactive mode-line faces.
     (dolist (face '(doom-modeline-buffer-path doom-modeline-buffer-file))
       (set-face-attribute face nil
-                          :background "#181825" :foreground "#cdd6f4"
+                          :background 'unspecified :foreground "#cdd6f4"
                           :weight 'bold))
     (set-face-attribute 'doom-modeline-buffer-modified nil
-                        :background "#181825" :foreground "#f38ba8")
+                        :background 'unspecified :foreground "#f38ba8")
     (set-face-attribute 'doom-modeline-buffer-major-mode nil
-                        :background "#181825" :foreground "#89b4fa")
+                        :background 'unspecified :foreground "#89b4fa")
     (set-face-attribute 'doom-modeline-project-dir nil
-                        :background "#181825" :foreground "#6c7086")
+                        :background 'unspecified :foreground "#6c7086")
     (set-face-attribute 'doom-modeline-info nil
-                        :background "#181825" :foreground "#a6e3a1")
+                        :background 'unspecified :foreground "#a6e3a1")
     (set-face-attribute 'doom-modeline-warning nil
-                        :background "#181825" :foreground "#f9e2af")
+                        :background 'unspecified :foreground "#f9e2af")
     (set-face-attribute 'doom-modeline-urgent nil
-                        :background "#181825" :foreground "#f38ba8")
+                        :background 'unspecified :foreground "#f38ba8")
     (set-face-attribute 'doom-modeline-panel nil
                         :background "#313244" :foreground "#cdd6f4")))
 

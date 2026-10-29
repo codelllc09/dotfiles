@@ -96,6 +96,7 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
     (when (locate-library "dirvish-side")
       (require 'dirvish-side))))
 (declare-function nerd-icons-dired-mode "nerd-icons-dired.el")
+(declare-function nerd-icons-icon-for-dir "nerd-icons.el")
 (declare-function dirvish-side "dirvish-side.el")
 (declare-function dirvish-side-follow-mode "dirvish-side.el")
 (declare-function lcw-disable-tab-line-in-all-buffers "init-ui.el")
@@ -200,6 +201,23 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
   ;; attributes that fit the narrow tree (no time/size/collapse).
   (dirvish-side-attributes '(subtree-state nerd-icons))
   (dirvish-side-width 40)
+  ;; Dirvish normally marks its side window `no-other-window', which makes
+  ;; the standard `C-x o' skip the project tree.  Keep the side window
+  ;; protected from `delete-other-windows', but include it in normal focus
+  ;; traversal within the current tab.
+  (dirvish-side-window-parameters
+   '((no-delete-other-windows . t) (no-other-window . nil)))
+  ;; A single calm path at the top and a compact item count at the bottom.
+  ;; The segment functions are defined below with the rest of the styling.
+  (dirvish-side-header-line-format
+   '(:left (lcw-side-title) :right ()))
+  (dirvish-side-mode-line-format
+   '(:left (lcw-side-label) :right (index)))
+  ;; Four columns per level keep nested names aligned without making the
+  ;; hierarchy feel cramped.  Nerd chevrons match the file icon family.
+  (dirvish-subtree-prefix "  │ ")
+  (dirvish-subtree-state-style 'nerd)
+  (dirvish-subtree-icon-scale-factor '(0.78 . -0.05))
   (dirvish-use-header-line 'global)
   (dirvish-mode-line-bar-image-width 0)
   :config
@@ -407,19 +425,149 @@ draws stale data immediately, and always revalidates asynchronously."
                (when (equal (expand-file-name default-directory) dir)
                  (lcw-git-mark-draw entries))))))))))
 
-;; Reference-style tree look, borrowed from the neotree/bedrock setups:
-;; monochrome icons, airy row spacing, and a slightly wider side panel.
-;; Icons stay colorful everywhere else (tab bar, dashboard) because this is
-;; buffer-local to Dirvish buffers.
+;; Reference-style project tree: the sidebar is one shade deeper than the
+;; editor, with restrained monochrome icons, subtle guides, an unambiguous
+;; selected row, and small top/bottom chrome.  Every remap is buffer-local, so
+;; the full-frame file browser, tab bar and dashboard keep their own styling.
+
+(defface lcw-dirvish-side-base
+  '((t (:background "#181825" :foreground "#9399b2")))
+  "Base face for the project tree sidebar."
+  :group 'lcw-dirvish)
+
+(defface lcw-dirvish-side-directory
+  '((t (:foreground "#bac2de")))
+  "Face for directories in the project tree."
+  :group 'lcw-dirvish)
+
+(defface lcw-dirvish-side-symlink
+  '((t (:foreground "#cba6f7")))
+  "Face for symbolic links in the project tree."
+  :group 'lcw-dirvish)
+
+(defface lcw-dirvish-side-icon
+  '((t (:foreground "#7f849c")))
+  "Face for monochrome project tree icons and disclosure arrows."
+  :group 'lcw-dirvish)
+
+(defface lcw-dirvish-side-guide
+  '((t (:foreground "#313244")))
+  "Face for the subtle vertical guides in expanded directories."
+  :group 'lcw-dirvish)
+
+(defface lcw-dirvish-side-selection
+  '((t (:background "#313244" :foreground "#bac2de" :extend t)))
+  "Face for the selected project tree row."
+  :group 'lcw-dirvish)
+
+(defface lcw-dirvish-side-selection-inactive
+  '((t (:background "#1e1e2e" :foreground "#9399b2" :extend t)))
+  "Face for the selected row while the project tree is unfocused."
+  :group 'lcw-dirvish)
+
+(defface lcw-dirvish-side-header
+  '((t (:background "#11111b" :foreground "#bac2de"
+         :box (:line-width (1 . 5) :color "#11111b"))))
+  "Face for the project tree header."
+  :group 'lcw-dirvish)
+
+(defface lcw-dirvish-side-header-icon
+  '((t (:foreground "#89b4fa")))
+  "Face for the repository/folder icon in the project tree header."
+  :group 'lcw-dirvish)
+
+(defface lcw-dirvish-side-mode-line
+  '((t (:background "#11111b" :foreground "#6c7086"
+         :box (:line-width (1 . 3) :color "#11111b"))))
+  "Face for the compact project tree footer."
+  :group 'lcw-dirvish)
+
+(defface lcw-dirvish-side-focus
+  '((t (:inherit lcw-dirvish-side-mode-line
+         :foreground "#89b4fa" :weight bold)))
+  "Face for the project tree footer while its window is selected."
+  :group 'lcw-dirvish)
+
+(defun lcw-dirvish-side-short-path (directory)
+  "Return a compact, tail-preserving label for DIRECTORY."
+  (let* ((path (directory-file-name (abbreviate-file-name directory)))
+         (limit 31)
+         (tail-width (1- limit)))
+    (if (<= (string-width path) limit)
+        path
+      (concat "…"
+              (truncate-string-to-width
+               path (string-width path)
+               (- (string-width path) tail-width))))))
+
+(defun dirvish-lcw-side-title-ml ()
+  "Return the icon and root path shown in the project tree header."
+  (let* ((root (expand-file-name default-directory))
+         (icon (if (fboundp 'nerd-icons-icon-for-dir)
+                   (nerd-icons-icon-for-dir
+                    root :face 'lcw-dirvish-side-header-icon
+                    :height 0.92 :v-adjust -0.03)
+                 (propertize "▣" 'face 'lcw-dirvish-side-header-icon)))
+         (label (lcw-dirvish-side-short-path root)))
+    (propertize (format "  %s  %s" icon label)
+                'face 'lcw-dirvish-side-header
+                'help-echo root)))
+
+(defun dirvish-lcw-side-label-ml ()
+  "Return a section label that also makes sidebar focus explicit."
+  (if (mode-line-window-selected-p)
+      (propertize "  ● EXPLORER" 'face 'lcw-dirvish-side-focus)
+    (propertize "  EXPLORER" 'face 'lcw-dirvish-side-mode-line)))
+
+(defvar-local lcw-dirvish-side-face-cookies nil
+  "Face remapping cookies installed in a Dirvish side buffer.")
+
+(defun lcw-dirvish-side-clear-faces ()
+  "Remove project tree face remappings from the current buffer."
+  (mapc #'face-remap-remove-relative lcw-dirvish-side-face-cookies)
+  (setq lcw-dirvish-side-face-cookies nil))
+
+(defun lcw-dirvish-side-apply-faces ()
+  "Install theme-stable, buffer-local faces for a Dirvish side buffer."
+  (lcw-dirvish-side-clear-faces)
+  (setq lcw-dirvish-side-face-cookies
+        (list
+         ;; The relative remap retains the configured Maple Mono family.  A
+         ;; raw `face-remapping-alist' entry would replace and lose it.
+         (face-remap-add-relative 'default 'lcw-dirvish-side-base)
+         (face-remap-add-relative 'dired-directory
+                                  'lcw-dirvish-side-directory)
+         (face-remap-add-relative 'dired-symlink 'lcw-dirvish-side-symlink)
+         (face-remap-add-relative 'dirvish-subtree-state
+                                  'lcw-dirvish-side-icon)
+         (face-remap-add-relative 'dirvish-subtree-guide
+                                  'lcw-dirvish-side-guide)
+         (face-remap-add-relative 'dirvish-hl-line
+                                  'lcw-dirvish-side-selection)
+         (face-remap-add-relative 'dirvish-hl-line-inactive
+                                  'lcw-dirvish-side-selection-inactive)
+         (face-remap-add-relative 'header-line 'lcw-dirvish-side-header)
+         (face-remap-add-relative 'mode-line-inactive
+                                  'lcw-dirvish-side-mode-line))))
+
 (defun lcw-dirvish-tree-style (&rest _)
-  "Flatten and air out the current Dirvish buffer."
-  (setq-local nerd-icons-color-icons nil)
-  ;; Hierarchy comes from `dired-directory' being bold (see init-ui).  Do NOT
-  ;; dim files via `face-remapping-alist': remapping `default' to a spec with
-  ;; only :foreground drops its font family, so all text (and anything
-  ;; inheriting `default', like the tab bar) falls back to a proportional font.
-  (when (eq 'side (ignore-errors (dv-type (dirvish-curr))))
-    (setq-local line-spacing 4)))
+  "Apply the dedicated presentation when this is a Dirvish side buffer."
+  (if (eq 'side (ignore-errors (dv-type (dirvish-curr))))
+      (progn
+        (setq-local nerd-icons-color-icons nil
+                    dirvish-nerd-icons-palette 'lcw-dirvish-side-icon
+                    line-spacing 4)
+        (display-line-numbers-mode -1)
+        (lcw-dirvish-side-apply-faces)
+        ;; One character of left breathing room keeps icons and Git fringe
+        ;; marks from feeling glued to the edge of the frame.
+        (when-let ((window (get-buffer-window (current-buffer) t)))
+          (set-window-margins window 1 0)))
+    ;; A Dired buffer can later be reused by a normal/full-frame session.
+    (lcw-dirvish-side-clear-faces)
+    (kill-local-variable 'nerd-icons-color-icons)
+    (kill-local-variable 'dirvish-nerd-icons-palette)
+    (kill-local-variable 'line-spacing)))
 
 (with-eval-after-load 'dirvish
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-tree-style))
