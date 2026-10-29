@@ -27,7 +27,11 @@
              diff-hl-previous-hunk
              diff-hl-stage-current-hunk
              diff-hl-revert-hunk)
-  :hook (find-file . lcw-enable-diff-hl-maybe)
+  ;; `diff-hl-dired-mode' is the community-standard way to show VCS status
+  ;; inside Dired (and therefore Dirvish): it asks `vc-dir' for per-file
+  ;; states and paints fringe marks using the theme's diff-hl faces.
+  :hook ((find-file . lcw-enable-diff-hl-maybe)
+         (dired-mode . diff-hl-dired-mode))
   :custom
   (diff-hl-disable-on-remote t)
   (diff-hl-flydiff-delay 0.5)
@@ -189,13 +193,16 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
          ("M-f" . dirvish-history-go-forward)
          ("M-b" . dirvish-history-go-backward))
   :custom
+  ;; Git status is drawn by `diff-hl-dired-mode' (see the diff-hl block
+  ;; above), not by Dirvish's own `vc-state' attribute: that one paints
+  ;; via delayed overlays and is known to glitch (dirvish issue #1).
   (dirvish-attributes
-   '(vc-state subtree-state nerd-icons collapse file-time file-size))
+   '(subtree-state nerd-icons collapse file-time file-size))
   ;; `dirvish-side-attributes' defaults to a snapshot of
   ;; `dirvish-attributes' taken when dirvish-side loads, which happens
   ;; before this :custom applies.  Set it explicitly, and keep only
   ;; attributes that fit the narrow tree (no time/size/collapse).
-  (dirvish-side-attributes '(vc-state subtree-state nerd-icons))
+  (dirvish-side-attributes '(subtree-state nerd-icons))
   (dirvish-use-header-line 'global)
   (dirvish-mode-line-bar-image-width 0)
   :config
@@ -203,45 +210,6 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-disable-legacy-icons)
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-sync-listing-switches))
 
-;; Git gutter for Dirvish.  Two problems with the stock setup, both fixed
-;; here: the bitmap is a single hairline pixel column, and every state face
-;; inherits `vc-state-base', which Emacs 30 defines with NO color -- so all
-;; states look identical.  Fill the whole fringe (~8px, one character cell)
-;; and give each state an explicit Catppuccin Mocha color.
-(defgroup lcw-dirvish nil
-  "Local Dirvish tweaks."
-  :group 'dirvish)
-
-(defface lcw-vc-modified '((t :foreground "#f9e2af")) ; yellow
-  "Git gutter: modified / needs-update / locally locked."
-  :group 'lcw-dirvish)
-
-(defface lcw-vc-added '((t :foreground "#a6e3a1")) ; green
-  "Git gutter: staged as a new file."
-  :group 'lcw-dirvish)
-
-(defface lcw-vc-dropped '((t :foreground "#f38ba8")) ; red
-  "Git gutter: deleted / missing / conflict / needs-merge."
-  :group 'lcw-dirvish)
-
-(defface lcw-vc-untracked '((t :foreground "#89b4fa")) ; blue
-  "Git gutter: not tracked by the repository."
-  :group 'lcw-dirvish)
-
-(with-eval-after-load 'dirvish-vc
-  (define-fringe-bitmap 'dirvish-vc-gutter [255] nil 8 '(center repeated))
-  (setq dirvish-vc-state-face-alist
-        '((up-to-date)
-          (edited . lcw-vc-modified)
-          (unlocked-changes . lcw-vc-modified)
-          (needs-update . lcw-vc-modified)
-          (added . lcw-vc-added)
-          (unregistered . lcw-vc-untracked)
-          (removed . lcw-vc-dropped)
-          (missing . lcw-vc-dropped)
-          (needs-merge . lcw-vc-dropped)
-          (conflict . lcw-vc-dropped)
-          (ignored))))
 
 ;; dired-subtree expanded subdirectories in place inside plain Dired
 ;; buffers; it served the retired left Dired panel.  Dirvish ships its own
