@@ -221,6 +221,46 @@ The full path is shown in the tooltip and copied on mouse-1."
     (set-face-attribute 'doom-modeline-panel nil
                         :background "#313244" :foreground "#cdd6f4")))
 
+;;;; UI palette ---------------------------------------------------------------
+
+;; The tab-bar colors below are hand-tuned to the loaded theme; they are NOT
+;; derived from theme faces.  WHEN SWITCHING OR ADDING A THEME:
+;;   1. add a branch for it in `lcw-ui-palette' below (match on the theme
+;;      name, fill in the seven tokens),
+;;   2. keep `lcw-apply-doom-modeline-faces' (its setq block) and the
+;;      dashboard/terminal faces in `lcw-apply-ui-faces' in sync -- they
+;;      are still hardcoded to Mocha,
+;;   3. reload -- `lcw-load-theme' already re-runs `lcw-apply-ui-faces'.
+;; Unlisted themes fall through to the catch-all branch, which currently
+;; mirrors Catppuccin Mocha.
+
+(defun lcw-ui-palette ()
+  "Return color tokens for the enabled theme.
+Each branch matches a regexp against `custom-enabled-themes'."
+  (let ((names (mapconcat #'symbol-name custom-enabled-themes " ")))
+    (cond
+     ;; Catppuccin Mocha (default theme, `lcw-default-theme').
+     ((string-match-p "catppuccin" names)
+      (list :bar-bg "#181825"        ; mantle
+            :bar-fg "#6c7086"        ; overlay0
+            :pill-bg "#313244"       ; surface0
+            :pill-fg "#cdd6f4"       ; text
+            :accent "#7f849c"        ; overlay1
+            :accent-hover "#89b4fa"  ; blue
+            :modified "#f9e2af"))    ; peach
+     ;; Next theme family: add a branch here, e.g.
+     ;; ((string-match-p "nord" names) (list :bar-bg ... :modified ...))
+     (t
+      ;; Fallback mirror of the Mocha branch; revisit per theme.
+      (list :bar-bg "#181825" :bar-fg "#6c7086"
+            :pill-bg "#313244" :pill-fg "#cdd6f4"
+            :accent "#7f849c" :accent-hover "#89b4fa"
+            :modified "#f9e2af")))))
+
+(defun lcw-ui-color (key)
+  "Convenience accessor for KEY in `lcw-ui-palette'."
+  (plist-get (lcw-ui-palette) key))
+
 ;; A tab-bar tab is a workspace/window layout. Its icon follows the buffer that
 ;; represents the workspace, like the program icon in the WezTerm tab title.
 (defun lcw-tab-bar-tab-buffer (tab)
@@ -232,6 +272,17 @@ The full path is shown in the tooltip and copied on mouse-1."
           (seq-find #'buffer-live-p (alist-get 'wc-bl tab))
           (get-buffer (alist-get 'name tab))))))
 
+(defun lcw-tab-bar-tab-name-format-label (name tab _index)
+  "Clean up NAME: drop decoration stars, mark unsaved file buffers."
+  (let ((label (string-trim name "\\*+" "\\*+")))
+    (if-let* ((buffer (lcw-tab-bar-tab-buffer tab))
+              ((buffer-file-name buffer))
+              ((buffer-modified-p buffer)))
+        (concat label
+                (propertize " ●" 'face
+                            `(:foreground ,(lcw-ui-color :modified))))
+      label)))
+
 (defun lcw-tab-bar-tab-name-format-icon (name tab _index)
   "Prefix TAB's NAME with an icon for its representative buffer."
   (let* ((buffer (lcw-tab-bar-tab-buffer tab))
@@ -239,41 +290,78 @@ The full path is shown in the tooltip and copied on mouse-1."
                     (fboundp 'nerd-icons-icon-for-buffer)
                     (with-current-buffer buffer
                       (nerd-icons-icon-for-buffer)))))
-    ;; Let the active/inactive tab face color the icon together with the name.
+    ;; Keep the icon's own face: the tab face appended later by
+    ;; `tab-bar-tab-name-format-face' is subordinate to it, so icons stay
+    ;; colored while still picking up the pill background.
     (concat (if (and (stringp icon) (not (string-empty-p icon)))
-                (substring-no-properties icon)
-              "◇")
+                icon
+              (propertize "◇"))
             " " name)))
 
 (defun lcw-tab-bar-tab-name-format-padding (name _tab _index)
-  "Add compact horizontal breathing room around a tab NAME."
+  "Add horizontal breathing room around a tab NAME."
   (concat " " name " "))
 
-(defun lcw-tab-bar-tab-name-format-status (name tab _index)
-  "Prefix NAME with a clear active or inactive workspace marker."
-  (concat (if (eq (car tab) 'current-tab) "● " "· ") name))
+(defun lcw-tab-bar--history-icon (icon-name fallback)
+  "A solid caret for ICON-NAME; tinted, blue on hover.
+FALLBACK is a plain glyph used when nerd-icons is unavailable."
+  (if (fboundp 'nerd-icons-faicon)
+      ;; mouse-face replaces the face on hover, so it must carry the
+      ;; family/height itself or the glyph falls back to another font.
+      (propertize
+       (concat " "
+               (nerd-icons-faicon icon-name
+                                  :face `(:foreground ,(lcw-ui-color :accent))
+                                  :height 0.9)
+               " ")
+       'mouse-face (list :family (nerd-icons-faicon-family)
+                         :height 0.9
+                         :foreground (lcw-ui-color :accent-hover)))
+    (propertize (concat " " fallback " ")
+                'face `(:foreground ,(lcw-ui-color :accent))
+                'mouse-face `(:foreground ,(lcw-ui-color :accent-hover)))))
+
+(defun lcw-tab-bar-format-history ()
+  "Solid caret ‹ › buttons for tab history.
+Rendered unconditionally; `tab-bar-history-mode' only decides
+whether the commands have history to walk through."
+  `((lcw-hist-back
+     menu-item
+     ,(lcw-tab-bar--history-icon "nf-fa-caret_left" "‹")
+     tab-bar-history-back
+     :help "Go back in tab history")
+    (lcw-hist-fwd
+     menu-item
+     ,(lcw-tab-bar--history-icon "nf-fa-caret_right" "›")
+     tab-bar-history-forward
+     :help "Go forward in tab history")))
 
 (defun lcw-apply-ui-faces ()
-  "Style tabs, contextual status lines, and window boundaries."
-  (set-face-attribute 'tab-bar nil
-                      :inherit 'default
-                      :background "#181825"
-                      :foreground "#6c7086"
-                      :box nil)
-  (set-face-attribute 'tab-bar-tab nil
-                      :inherit 'tab-bar
-                      :background "#313244"
-                      :foreground "#cdd6f4"
-                      :weight 'bold
-                      :overline "#89b4fa"
-                      :box '(:line-width (6 . 3) :color "#313244"))
-  (set-face-attribute 'tab-bar-tab-inactive nil
-                      :inherit 'tab-bar
-                      :background "#181825"
-                      :foreground "#6c7086"
-                      :weight 'normal
-                      :overline nil
-                      :box '(:line-width (6 . 3) :color "#181825"))
+  "Style tabs, contextual status lines, and window boundaries.
+Tab colors come from `lcw-ui-palette'; see the palette section note
+about keeping the rest of this function theme-synced."
+  (let* ((p (lcw-ui-palette))
+         (bar-bg (plist-get p :bar-bg))
+         (bar-fg (plist-get p :bar-fg))
+         (pill-bg (plist-get p :pill-bg))
+         (pill-fg (plist-get p :pill-fg)))
+    (set-face-attribute 'tab-bar nil
+                        :inherit 'default
+                        :background bar-bg
+                        :foreground bar-fg
+                        :box nil)
+    (set-face-attribute 'tab-bar-tab nil
+                        :inherit 'tab-bar
+                        :background pill-bg
+                        :foreground pill-fg
+                        :weight 'bold
+                        :box `(:line-width (6 . 3) :color ,pill-bg))
+    (set-face-attribute 'tab-bar-tab-inactive nil
+                        :inherit 'tab-bar
+                        :background bar-bg
+                        :foreground bar-fg
+                        :weight 'normal
+                        :box `(:line-width (6 . 3) :color ,bar-bg)))
   ;; Only the Agent Shell / vterm panel sets a header line now.
   (set-face-attribute 'header-line nil
                       :inherit 'mode-line-inactive
@@ -303,17 +391,32 @@ The full path is shown in the tooltip and copied on mouse-1."
   :custom
   (tab-bar-show 1)
   (tab-bar-auto-width nil)
-  (tab-bar-tab-hints t)
-  (tab-bar-separator "")
   (tab-bar-close-button-show nil)
-  (tab-bar-tab-name-format-functions
-   '(lcw-tab-bar-tab-name-format-icon
-     tab-bar-tab-name-format-hints
-     lcw-tab-bar-tab-name-format-status
-     tab-bar-tab-name-format-close-button
-     lcw-tab-bar-tab-name-format-padding
-     tab-bar-tab-name-format-face))
   :config
+  ;; Invisible gutters: plain spaces.  Only the active pill has a
+  ;; background, so tinted seams just read as holes in the bar.
+  (setq tab-bar-separator "  ")
+  ;; Style the "+" button; raw menu-item strings inherit the plain
+  ;; tab-bar face.
+  (setq tab-bar-new-button
+        (propertize " + " 'face `(:foreground ,(lcw-ui-color :accent))
+                    'mouse-face `(:foreground ,(lcw-ui-color :accent-hover))))
+  ;; Own history buttons: the built-in `tab-bar-format-history' renders
+  ;; nothing when `tab-bar-history-mode' is off and leaves the arrows
+  ;; unstyled in Emacs 30.
+  (setq tab-bar-format
+        '(lcw-tab-bar-format-history
+          tab-bar-format-tabs
+          tab-bar-separator
+          tab-bar-format-add-tab))
+  ;; label -> icon -> padding -> face: the face function runs last and
+  ;; appends the active/inactive face, subordinate to the icon and
+  ;; modified-dot faces.
+  (setq tab-bar-tab-name-format-functions
+        '(lcw-tab-bar-tab-name-format-label
+          lcw-tab-bar-tab-name-format-icon
+          lcw-tab-bar-tab-name-format-padding
+          tab-bar-tab-name-format-face))
   (lcw-apply-ui-faces)
   (tab-bar-mode 1)
   (tab-bar-history-mode 1))
