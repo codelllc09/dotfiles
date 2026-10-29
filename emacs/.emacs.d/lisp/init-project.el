@@ -190,13 +190,12 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
          ("M-b" . dirvish-history-go-backward))
   :custom
   (dirvish-attributes
-   '(subtree-state nerd-icons collapse file-time file-size
-     lcw-vc-filename-face lcw-vc-badge))
+   '(vc-state subtree-state nerd-icons collapse file-time file-size))
   ;; `dirvish-side-attributes' defaults to a snapshot of
   ;; `dirvish-attributes' taken when dirvish-side loads, which happens
   ;; before this :custom applies.  Set it explicitly: narrow tree gets
   ;; colored filenames only (no letters, no time/size/collapse).
-  (dirvish-side-attributes '(subtree-state nerd-icons lcw-vc-filename-face))
+  (dirvish-side-attributes '(vc-state subtree-state nerd-icons))
   (dirvish-use-header-line 'global)
   (dirvish-mode-line-bar-image-width 0)
   :config
@@ -204,8 +203,8 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-disable-legacy-icons)
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-sync-listing-switches))
 
-;; VS Code style git indicators: palette-driven colors (init-ui) applied to
-;; the filename itself plus a status letter right after it (M/A/U/D/C).
+;; Palette-driven git colors (faces defined in init-ui) plus a 3px solid
+;; gutter bar instead of the hairline 1px default bitmap.
 (with-eval-after-load 'dirvish-vc
   (setq dirvish-vc-state-face-alist
         '((up-to-date)
@@ -218,32 +217,10 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
           (unlocked-changes . lcw-vc-modified)
           (needs-update . lcw-vc-modified)
           (ignored)
-          (unregistered . lcw-vc-untracked))))
+          (unregistered . lcw-vc-untracked))
+  ;; 3px solid gutter bar instead of the hairline 1px default bitmap.
+  (define-fringe-bitmap 'dirvish-vc-gutter [255 255 255] nil 3 '(center repeated))))
 
-(when (locate-library "dirvish")
-  (defconst lcw-vc-state-letter-alist
-    '((edited . "M") (unlocked-changes . "M") (needs-update . "M")
-      (added . "A") (unregistered . "U")
-      (removed . "D") (missing . "D")
-      (needs-merge . "C") (conflict . "C"))
-    "Git state -> VS Code style status letter.")
-
-  (dirvish-define-attribute lcw-vc-filename-face
-    "Tint the filename with its git state color."
-    :when (and (symbolp (dirvish-prop :vc-backend)) (not (dirvish-prop :remote)))
-    (when-let* ((state (dirvish-attribute-cache f-name :vc-state))
-                (face (alist-get state dirvish-vc-state-face-alist))
-                (ov (make-overlay f-beg f-end)))
-      (overlay-put ov 'face face)
-      `(ov . ,ov)))
-
-  (dirvish-define-attribute lcw-vc-badge
-    "Show a status letter right after the filename."
-    :when (and (symbolp (dirvish-prop :vc-backend)) (not (dirvish-prop :remote)))
-    (when-let* ((state (dirvish-attribute-cache f-name :vc-state))
-                (face (alist-get state dirvish-vc-state-face-alist))
-                (letter (alist-get state lcw-vc-state-letter-alist)))
-      `(left . ,(propertize (format " %s" letter) 'face face)))))
 
 ;; dired-subtree expanded subdirectories in place inside plain Dired
 ;; buffers; it served the retired left Dired panel.  Dirvish ships its own

@@ -44,6 +44,7 @@
 ;; is rebuilt.  Every one of them is a known load-order coupling, so keep the
 ;; reports out of *Warnings*; they are still recorded in
 ;; *Async Native Compile Log*.
+(defvar native-comp-async-report-warnings-errors) ; defined in C (comp.c)
 (setq native-comp-async-report-warnings-errors 'silent)
 ;; Local configuration modules and pinned code not distributed through ELPA.
 (add-to-list 'load-path (expand-file-name "lisp" user-emacs-directory))
