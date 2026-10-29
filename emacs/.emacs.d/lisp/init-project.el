@@ -11,6 +11,30 @@
   :if (locate-library "magit")
   :bind (("C-c g" . magit-status)))
 
+(defun lcw-enable-diff-hl-maybe ()
+  "Show Git line changes for local version-controlled files."
+  (when (and buffer-file-name
+             (not (file-remote-p buffer-file-name))
+             (vc-backend buffer-file-name))
+    (diff-hl-mode 1)
+    (diff-hl-flydiff-mode 1)))
+
+(use-package diff-hl
+  :if (locate-library "diff-hl")
+  :commands (diff-hl-mode
+             diff-hl-flydiff-mode
+             diff-hl-next-hunk
+             diff-hl-previous-hunk
+             diff-hl-stage-current-hunk
+             diff-hl-revert-hunk)
+  :hook (find-file . lcw-enable-diff-hl-maybe)
+  :custom
+  (diff-hl-disable-on-remote t)
+  (diff-hl-flydiff-delay 0.5)
+  :config
+  (with-eval-after-load 'magit
+    (add-hook 'magit-post-refresh-hook #'diff-hl-magit-post-refresh)))
+
 (keymap-global-set "C-c c" #'compile)
 (keymap-global-set "C-c t" #'project-shell)
 (keymap-global-set "C-c d" #'project-dired)

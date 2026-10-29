@@ -16,6 +16,9 @@
 (use-package eglot
   :ensure nil
   :commands (eglot eglot-rename eglot-format-buffer eglot-code-actions)
+  :custom
+  ;; Start the language server without blocking editing while it initializes.
+  (eglot-sync-connect nil)
   :bind (("C-c l l" . eglot)
          ("C-c l r" . eglot-rename)
          ("C-c l f" . eglot-format-buffer)
@@ -28,6 +31,58 @@
          ("C-c ! p" . flymake-show-project-diagnostics)
          ("C-c ! n" . flymake-goto-next-error)
          ("C-c ! b" . flymake-goto-prev-error)))
+
+(defconst lcw-todo-search-regexp
+  "\\b(TODO|FIXME|BUG|HACK|NOTE|REVIEW|DEPRECATED|XXX)\\b"
+  "Regular expression used for project-wide code-note searches.")
+
+(defun lcw-search-project-todos ()
+  "Search the current project for TODO-style code notes."
+  (interactive)
+  (let ((root (if-let* ((project (project-current nil)))
+                  (project-root project)
+                default-directory)))
+    (if (fboundp 'consult-ripgrep)
+        (consult-ripgrep root lcw-todo-search-regexp)
+      (rgrep lcw-todo-search-regexp "*" root))))
+
+(defvar-keymap lcw-todo-prefix-map
+  :doc "TODO and code-note commands."
+  "n" #'hl-todo-next
+  "p" #'hl-todo-previous
+  "o" #'hl-todo-occur
+  "s" #'lcw-search-project-todos)
+
+(keymap-global-set "C-c n" lcw-todo-prefix-map)
+
+(use-package hl-todo
+  :if (locate-library "hl-todo")
+  :commands (hl-todo-mode hl-todo-next hl-todo-previous hl-todo-occur)
+  :hook (prog-mode . hl-todo-mode)
+  :custom
+  (hl-todo-highlight-punctuation ":")
+  (hl-todo-text-modes nil)
+  (hl-todo-keyword-faces
+   '(("TODO" warning bold)
+     ("FIXME" error bold)
+     ("BUG" error bold)
+     ("HACK" font-lock-constant-face bold)
+     ("NOTE" success bold)
+     ("REVIEW" font-lock-keyword-face bold)
+     ("DEPRECATED" font-lock-doc-face bold)
+     ("XXX" font-lock-constant-face bold))))
+
+(defvar-keymap lcw-fold-prefix-map
+  :doc "Code folding commands."
+  "z" #'hs-toggle-hiding
+  "a" #'hs-hide-all
+  "s" #'hs-show-all)
+
+(keymap-global-set "C-c z" lcw-fold-prefix-map)
+
+(use-package hideshow
+  :ensure nil
+  :hook (prog-mode . hs-minor-mode))
 
 (defun lcw-python-enable-ruff-diagnostics ()
   "Enable live Ruff diagnostics when Ruff exists on the current host."

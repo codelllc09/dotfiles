@@ -53,7 +53,7 @@
     ;; dired-subtree  ; retired 2026-10: Dirvish ships its own subtree
     vterm dape lua-mode pdf-tools
     autothemer avy embark embark-consult yasnippet cape multiple-cursors
-    paredit vlf agent-shell flymake-ruff)
+    paredit vlf agent-shell flymake-ruff diff-hl hl-todo)
   "Packages installed explicitly by `lcw-install-ide-packages'.")
 
 (defconst lcw-theme-packages
@@ -95,7 +95,8 @@
                   init-ui
                   init-project
                   init-agent
-                  init-programming))
+                  init-programming
+                  init-doctor))
   (require module))
 
 ;;; init.el ends here
