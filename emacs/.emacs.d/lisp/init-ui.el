@@ -263,6 +263,17 @@ Each branch matches a regexp against `custom-enabled-themes'."
   "Convenience accessor for KEY in `lcw-ui-palette'."
   (plist-get (lcw-ui-palette) key))
 
+(defun lcw-apply-dired-faces ()
+  "Give Dired directory lines weight-based emphasis.
+Guarded with `facep' because Dired is lazy-loaded: at init time the face
+does not exist yet and `set-face-attribute' would signal `Invalid face'.
+Re-applied from `lcw-dirvish-tree-style' once Dired is around."
+  (when (facep 'dired-directory)
+    (set-face-attribute 'dired-directory nil
+                        :inherit 'default
+                        :weight 'bold
+                        :foreground (lcw-ui-color :pill-fg))))
+
 ;; A tab-bar tab is a workspace/window layout. Its icon follows the buffer that
 ;; represents the workspace, like the program icon in the WezTerm tab title.
 (defun lcw-tab-bar-tab-buffer (tab)
@@ -384,12 +395,7 @@ about keeping the rest of this function theme-synced."
                   window-divider-first-pixel
                   window-divider-last-pixel))
     (set-face-attribute face nil :foreground "#45475a"))
-  ;; Directory listings: hierarchy by weight and brightness, not by hue.
-  ;; Regular files are dimmed buffer-locally in `lcw-dirvish-tree-style'.
-  (set-face-attribute 'dired-directory nil
-                      :inherit 'default
-                      :weight 'bold
-                      :foreground (lcw-ui-color :pill-fg))
+  (lcw-apply-dired-faces)
   (lcw-apply-doom-modeline-faces))
 
 ;; Keep the bar hidden until a second workspace exists. Unlike the default,
