@@ -27,11 +27,7 @@
              diff-hl-previous-hunk
              diff-hl-stage-current-hunk
              diff-hl-revert-hunk)
-  ;; `diff-hl-dired-mode' is the community-standard way to show VCS status
-  ;; inside Dired (and therefore Dirvish): it asks `vc-dir' for per-file
-  ;; states and paints fringe marks using the theme's diff-hl faces.
-  :hook ((find-file . lcw-enable-diff-hl-maybe)
-         (dired-mode . diff-hl-dired-mode))
+  :hook (find-file . lcw-enable-diff-hl-maybe)
   :custom
   (diff-hl-disable-on-remote t)
   (diff-hl-flydiff-delay 0.5)
@@ -210,6 +206,110 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-disable-legacy-icons)
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-sync-listing-switches))
 
+
+
+;;;; Dired / Dirvish git markers ---------------------------------------------
+
+;; `vc-git' maps both "M " (staged) and " M" (unstaged) to `edited', so the
+;; vc-based pipelines cannot separate them.  Read `git status --porcelain'
+;; directly and draw exactly one fringe glyph per file:
+;;
+;;   u   red     untracked (??)
+;;   |   green   staged, not yet committed (index dirty, worktree clean)
+;;   |   orange  worktree changes not staged (Y column dirty)
+;;   i   dim     ignored (!!) -- same look as before
+;;   -           clean / committed
+
+(defgroup lcw-dirvish nil
+  "Local Dired and Dirvish tweaks."
+  :group 'dired)
+
+(defface lcw-git-mark-untracked '((t :foreground "#f38ba8"))
+  "Fringe mark: file is not tracked by the repository."
+  :group 'lcw-dirvish)
+
+(defface lcw-git-mark-staged '((t :foreground "#a6e3a1"))
+  "Fringe mark: changes are staged but not committed."
+  :group 'lcw-dirvish)
+
+(defface lcw-git-mark-modified '((t :foreground "#fab387"))
+  "Fringe mark: worktree changes are not staged."
+  :group 'lcw-dirvish)
+
+(defface lcw-git-mark-ignored '((t :foreground "#6c7086"))
+  "Fringe mark: file is ignored by git."
+  :group 'lcw-dirvish)
+
+(defvar-local lcw-git-mark-overlays nil
+  "Overlays drawn by `lcw-git-mark-refresh' in this buffer.")
+
+(defun lcw-git-define-bitmaps ()
+  "Define the fringe bitmaps used by the git status marks."
+  (unless (fringe-bitmap-p 'lcw-git-bmp-u)
+    ;; Blocky "u": two 1px stems joined at the bottom, 3px wide.
+    (define-fringe-bitmap 'lcw-git-bmp-u [5 5 5 5 5 5 7] nil 3 'center)
+    ;; Solid 3px bar for staged/modified, told apart by color only.
+    (define-fringe-bitmap 'lcw-git-bmp-bar [255] nil 3 '(center repeated))
+    ;; Small "i" (same shape diff-hl uses for ignored entries).
+    (define-fringe-bitmap 'lcw-git-bmp-i [3 3 0 3 3 3 3 3 3 3] nil 2 'center)))
+
+(defun lcw-git-status (dir)
+  "Return ((RELATIVE-NAME . KIND) ...) for DIR.
+KIND is `untracked', `staged', `modified' or `ignored'."
+  (when (and (not (file-remote-p dir)) (executable-find "git"))
+    (with-temp-buffer
+      (when (eq 0 (process-file "git" nil t nil
+                                "status" "--porcelain=v1" "-z" "--ignored"))
+        (let ((fields (split-string (buffer-string) "\0" t))
+              entries)
+          (while fields
+            (let* ((entry (pop fields))
+                   (xy (substring entry 0 2))
+                   (path (substring entry 3)))
+              ;; Renames and copies carry the original path as the next field.
+              (when (memq (aref xy 0) '(?R ?C))
+                (pop fields))
+              (push (cons path
+                          (cond ((equal xy "??") 'untracked)
+                                ((equal xy "!!") 'ignored)
+                                ;; Y column dirty => worktree changes remain.
+                                ((not (eq (aref xy 1) ?\s)) 'modified)
+                                (t 'staged)))
+                    entries)))
+          entries)))))
+
+(defun lcw-git-mark-refresh (&rest _)
+  "Draw git status marks in the current Dired/Dirvish buffer."
+  (when (and (derived-mode-p 'dired-mode) (display-graphic-p))
+    (lcw-git-define-bitmaps)
+    (mapc #'delete-overlay lcw-git-mark-overlays)
+    (setq lcw-git-mark-overlays nil)
+    (let ((dir default-directory))
+      (dolist (entry (lcw-git-status dir))
+        (let* ((file (car entry))
+               (kind (cdr entry))
+               (face (pcase kind
+                       ('untracked 'lcw-git-mark-untracked)
+                       ('staged 'lcw-git-mark-staged)
+                       ('modified 'lcw-git-mark-modified)
+                       ('ignored 'lcw-git-mark-ignored)))
+               (bmp (pcase kind
+                      ('untracked 'lcw-git-bmp-u)
+                      ('ignored 'lcw-git-bmp-i)
+                      (_ 'lcw-git-bmp-bar))))
+          (save-excursion
+            (when (dired-goto-file (expand-file-name file dir))
+              (let ((ov (make-overlay (line-beginning-position)
+                                      (line-beginning-position))))
+                (overlay-put ov 'before-string
+                             (propertize " " 'display
+                                         `(left-fringe ,bmp ,face)))
+                (overlay-put ov 'evaporate t)
+                (push ov lcw-git-mark-overlays)))))))))
+
+(add-hook 'dired-after-readin-hook #'lcw-git-mark-refresh)
+(with-eval-after-load 'dirvish
+  (add-hook 'dirvish-setup-hook #'lcw-git-mark-refresh))
 
 ;; dired-subtree expanded subdirectories in place inside plain Dired
 ;; buffers; it served the retired left Dired panel.  Dirvish ships its own
