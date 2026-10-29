@@ -201,7 +201,8 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
   :config
   (require 'dirvish-history)
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-disable-legacy-icons)
-  (add-hook 'dirvish-setup-hook #'lcw-dirvish-sync-listing-switches))
+  (add-hook 'dirvish-setup-hook #'lcw-dirvish-sync-listing-switches)
+  (add-hook 'dirvish-setup-hook #'lcw-apply-dirvish-faces))
 
 ;; Palette-driven git colors (faces defined in init-ui) plus a 3px solid
 ;; gutter bar instead of the hairline 1px default bitmap.

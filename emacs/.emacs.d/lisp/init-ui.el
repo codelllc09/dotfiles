@@ -251,7 +251,9 @@ Each branch matches a regexp against `custom-enabled-themes'."
             :vc-modified "#f9e2af"   ; yellow
             :vc-added "#a6e3a1"      ; green
             :vc-deleted "#f38ba8"    ; red
-            :vc-untracked "#89b4fa")) ; blue
+            :vc-untracked "#89b4fa"     ; blue
+            :hl-line "#313244"           ; surface0
+            :hl-line-inactive "#292c3c")) ; surface0 dimmed
      ;; Next theme family: add a branch here, e.g.
      ;; ((string-match-p "nord" names) (list :bar-bg ... :modified ...))
      (t
@@ -261,11 +263,25 @@ Each branch matches a regexp against `custom-enabled-themes'."
             :accent "#7f849c" :accent-hover "#89b4fa"
             :modified "#f9e2af"
             :vc-modified "#f9e2af" :vc-added "#a6e3a1"
-            :vc-deleted "#f38ba8" :vc-untracked "#89b4fa")))))
+            :vc-deleted "#f38ba8" :vc-untracked "#89b4fa"
+            :hl-line "#313244" :hl-line-inactive "#292c3c")))))
 
 (defun lcw-ui-color (key)
   "Convenience accessor for KEY in `lcw-ui-palette'."
   (plist-get (lcw-ui-palette) key))
+
+(defun lcw-apply-dirvish-faces ()
+  "Give Dirvish's current-line highlight a visible palette color.
+Catppuccin maps `highlight' to a background barely lighter than the
+buffer, which makes the selected line invisible.  Guarded with `facep'
+because Dirvish may not be loaded yet."
+  (let ((p (lcw-ui-palette)))
+    (dolist (spec '((dirvish-hl-line . :hl-line)
+                    (dirvish-hl-line-inactive . :hl-line-inactive)))
+      (when (facep (car spec))
+        (set-face-attribute (car spec) nil
+                            :background (plist-get p (cdr spec))
+                            :extend t)))))
 
 ;; Git gutter faces for Dirvish's `vc-state' attribute (referenced from
 ;; `dirvish-vc-state-face-alist' in init-project).  Colors follow the
@@ -388,7 +404,8 @@ about keeping the rest of this function theme-synced."
                     (lcw-vc-added . :vc-added)
                     (lcw-vc-deleted . :vc-deleted)
                     (lcw-vc-untracked . :vc-untracked)))
-      (set-face-attribute (car spec) nil :foreground (plist-get p (cdr spec)))))
+      (set-face-attribute (car spec) nil :foreground (plist-get p (cdr spec))))
+    (lcw-apply-dirvish-faces))
   ;; Only the Agent Shell / vterm panel sets a header line now.
   (set-face-attribute 'header-line nil
                       :inherit 'mode-line-inactive
