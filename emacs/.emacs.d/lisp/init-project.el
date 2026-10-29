@@ -199,6 +199,7 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
   ;; before this :custom applies.  Set it explicitly, and keep only
   ;; attributes that fit the narrow tree (no time/size/collapse).
   (dirvish-side-attributes '(subtree-state nerd-icons))
+  (dirvish-side-width 40)
   (dirvish-use-header-line 'global)
   (dirvish-mode-line-bar-image-width 0)
   :config
@@ -405,6 +406,19 @@ draws stale data immediately, and always revalidates asynchronously."
              (with-current-buffer buffer
                (when (equal (expand-file-name default-directory) dir)
                  (lcw-git-mark-draw entries))))))))))
+
+;; Reference-style tree look, borrowed from the neotree/bedrock setups:
+;; monochrome icons, airy row spacing, and a slightly wider side panel.
+;; Icons stay colorful everywhere else (tab bar, dashboard) because this is
+;; buffer-local to Dirvish buffers.
+(defun lcw-dirvish-tree-style (&rest _)
+  "Flatten and air out the current Dirvish buffer."
+  (setq-local nerd-icons-color-icons nil)
+  (when (eq 'side (ignore-errors (dv-type (dirvish-curr))))
+    (setq-local line-spacing 4)))
+
+(with-eval-after-load 'dirvish
+  (add-hook 'dirvish-setup-hook #'lcw-dirvish-tree-style))
 
 (add-hook 'dired-after-readin-hook #'lcw-git-mark-refresh)
 (with-eval-after-load 'dirvish
