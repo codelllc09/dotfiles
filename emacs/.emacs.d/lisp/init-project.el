@@ -373,7 +373,9 @@ queries for the same DIR are dropped."
                                     (line-beginning-position))))
               (overlay-put ov 'before-string
                            (propertize " " 'display `(left-fringe ,bmp ,face)))
-              (overlay-put ov 'evaporate t)
+              ;; No `evaporate' here: an empty overlay (start = end) with
+              ;; that flag is deleted by Emacs immediately, which silently
+              ;; removed every mark.  We clear the list ourselves instead.
               (push ov lcw-git-mark-overlays))))))))
 
 (defun lcw-git-mark-refresh (&rest _)
