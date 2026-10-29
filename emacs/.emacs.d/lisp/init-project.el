@@ -216,7 +216,9 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
 ;;
 ;;   u   red     untracked (??)
 ;;   |   green   staged, not yet committed (index dirty, worktree clean)
-;;   |   orange  worktree changes not staged (Y column dirty)
+;;   |   blue    worktree changes not staged (Y column dirty)
+;;           blue, not orange: green+orange are near-identical for
+;;           deuteranopes (dE 11), green+blue are far apart (dE 66-69)
 ;;   i   dim     ignored (!!) -- same look as before
 ;;   -           clean / committed
 ;;
@@ -236,8 +238,11 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
   "Fringe mark: changes are staged but not committed."
   :group 'lcw-dirvish)
 
-(defface lcw-git-mark-modified '((t :foreground "#fab387"))
-  "Fringe mark: worktree changes are not staged."
+(defface lcw-git-mark-modified '((t :foreground "#89b4fa"))
+  "Fringe mark: worktree changes are not staged.
+Blue rather than orange on purpose: against the green "staged" bar,
+green/orange collapses to dE 11 under deuteranopia and protanopia,
+while green/blue stays at dE 66-69."
   :group 'lcw-dirvish)
 
 (defface lcw-git-mark-ignored '((t :foreground "#6c7086"))
