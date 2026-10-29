@@ -414,11 +414,10 @@ draws stale data immediately, and always revalidates asynchronously."
 (defun lcw-dirvish-tree-style (&rest _)
   "Flatten and air out the current Dirvish buffer."
   (setq-local nerd-icons-color-icons nil)
-  ;; Directories keep `dired-directory' (bold, bright); everything else is
-  ;; remapped one step darker, so hierarchy comes from weight and brightness
-  ;; rather than hue.
-  (setq-local face-remapping-alist
-              `((default :foreground ,(lcw-ui-color :file-fg))))
+  ;; Hierarchy comes from `dired-directory' being bold (see init-ui).  Do NOT
+  ;; dim files via `face-remapping-alist': remapping `default' to a spec with
+  ;; only :foreground drops its font family, so all text (and anything
+  ;; inheriting `default', like the tab bar) falls back to a proportional font.
   (when (eq 'side (ignore-errors (dv-type (dirvish-curr))))
     (setq-local line-spacing 4)))
 
