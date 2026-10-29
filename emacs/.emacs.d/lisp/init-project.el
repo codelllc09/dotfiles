@@ -414,6 +414,11 @@ draws stale data immediately, and always revalidates asynchronously."
 (defun lcw-dirvish-tree-style (&rest _)
   "Flatten and air out the current Dirvish buffer."
   (setq-local nerd-icons-color-icons nil)
+  ;; Directories keep `dired-directory' (bold, bright); everything else is
+  ;; remapped one step darker, so hierarchy comes from weight and brightness
+  ;; rather than hue.
+  (setq-local face-remapping-alist
+              `((default :foreground ,(lcw-ui-color :file-fg))))
   (when (eq 'side (ignore-errors (dv-type (dirvish-curr))))
     (setq-local line-spacing 4)))
 
