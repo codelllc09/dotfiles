@@ -105,3 +105,31 @@ vim.api.nvim_create_autocmd('FileType', {
     vim.opt_local.foldlevel = 99 -- 打开时全部展开
   end,
 })
+
+-- ── Python：使用 0.12 内置 LSP 客户端连接 Pyright ─────────────
+-- 优先使用 PATH 中的命令；桌面启动时 PATH 较短，则复用 Emacs 已安装的
+-- Pyright。这样两款编辑器的 Python 对比使用同一个语言服务器。
+local pyright = vim.fn.exepath('pyright-langserver')
+if pyright == '' then
+  local bundled = vim.fn.expand('~/.emacs.d/tools/node/node_modules/.bin/pyright-langserver')
+  if vim.fn.executable(bundled) == 1 then pyright = bundled end
+end
+
+if pyright ~= '' then
+  vim.lsp.config('pyright', {
+    cmd = { pyright, '--stdio' },
+    filetypes = { 'python' },
+    root_markers = {
+      'pyproject.toml', 'setup.py', 'setup.cfg', 'requirements.txt', '.git',
+    },
+    settings = {
+      python = {
+        analysis = {
+          typeCheckingMode = 'basic',
+          diagnosticMode = 'openFilesOnly',
+        },
+      },
+    },
+  })
+  vim.lsp.enable('pyright')
+end
