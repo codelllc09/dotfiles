@@ -413,7 +413,6 @@ draws stale data immediately, and always revalidates asynchronously."
 ;; buffer-local to Dirvish buffers.
 (defun lcw-dirvish-tree-style (&rest _)
   "Flatten and air out the current Dirvish buffer."
-  (lcw-apply-dired-faces)
   (setq-local nerd-icons-color-icons nil)
   ;; Hierarchy comes from `dired-directory' being bold (see init-ui).  Do NOT
   ;; dim files via `face-remapping-alist': remapping `default' to a spec with

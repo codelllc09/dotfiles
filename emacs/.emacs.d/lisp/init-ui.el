@@ -247,8 +247,7 @@ Each branch matches a regexp against `custom-enabled-themes'."
             :pill-fg "#cdd6f4"       ; text
             :accent "#7f849c"        ; overlay1
             :accent-hover "#89b4fa"  ; blue
-            :modified "#f9e2af"     ; peach
-            :file-fg "#bac2de"))     ; subtext1: regular files, dimmer than dirs
+            :modified "#f9e2af"))    ; peach
      ;; Next theme family: add a branch here, e.g.
      ;; ((string-match-p "nord" names) (list :bar-bg ... :modified ...))
      (t
@@ -256,23 +255,11 @@ Each branch matches a regexp against `custom-enabled-themes'."
       (list :bar-bg "#181825" :bar-fg "#6c7086"
             :pill-bg "#313244" :pill-fg "#cdd6f4"
             :accent "#7f849c" :accent-hover "#89b4fa"
-            :modified "#f9e2af"
-            :file-fg "#bac2de")))))
+            :modified "#f9e2af")))))
 
 (defun lcw-ui-color (key)
   "Convenience accessor for KEY in `lcw-ui-palette'."
   (plist-get (lcw-ui-palette) key))
-
-(defun lcw-apply-dired-faces ()
-  "Give Dired directory lines weight-based emphasis.
-Guarded with `facep' because Dired is lazy-loaded: at init time the face
-does not exist yet and `set-face-attribute' would signal `Invalid face'.
-Re-applied from `lcw-dirvish-tree-style' once Dired is around."
-  (when (facep 'dired-directory)
-    (set-face-attribute 'dired-directory nil
-                        :inherit 'default
-                        :weight 'bold
-                        :foreground (lcw-ui-color :pill-fg))))
 
 ;; A tab-bar tab is a workspace/window layout. Its icon follows the buffer that
 ;; represents the workspace, like the program icon in the WezTerm tab title.
@@ -395,7 +382,6 @@ about keeping the rest of this function theme-synced."
                   window-divider-first-pixel
                   window-divider-last-pixel))
     (set-face-attribute face nil :foreground "#45475a"))
-  (lcw-apply-dired-faces)
   (lcw-apply-doom-modeline-faces))
 
 ;; Keep the bar hidden until a second workspace exists. Unlike the default,
