@@ -1,4 +1,43 @@
-# ~/.config/yazi/yazi.toml —— 放大预览图的上限，不调大则 zoom 到 1000px 就被截住
+# ~/.config/yazi/yazi.toml
+[mgr]
+# 显示 .gitignore 等点开头的文件（仍可在 Yazi 内按 . 临时切换）
+show_hidden = true
+
+# 放大预览图的上限，不调大则 zoom 到 1000px 就被截住
 [preview]
 max_width  = 2000
 max_height = 2000
+
+# git.yazi：在文件列表行尾显示 git 状态标识（ignored/untracked/staged/…）
+# 新版 yazi 已移除内置 git 标识，需安装官方插件 yazi-rs/plugins:git
+[[plugin.prepend_fetchers]]
+url   = "*"
+run   = "git"
+group = "git"
+
+[[plugin.prepend_fetchers]]
+url   = "*/"
+run   = "git"
+group = "git"
+
+
+# ===================== 预览补全 =====================
+
+# Office 文档（office.yazi）：doc/docx/xls/xlsx/ppt/pptx/odt/ods/odp/rtf
+# 原理：libreoffice 无头模式转 PDF → pdftoppm 渲染成图片，首次预览约 1~2 秒
+[[plugin.prepend_preloaders]]
+url = "*.{doc,docx,xls,xlsx,ppt,pptx,odt,ods,odp,rtf}"
+run = "office"
+
+[[plugin.prepend_previewers]]
+url = "*.{doc,docx,xls,xlsx,ppt,pptx,odt,ods,odp,rtf}"
+run = "office"
+
+# SQLite 数据库（piper + python3 标准库，见 scripts/sqlite-preview.py；
+# 本机无 sqlite3 CLI，故不用 AminurAlam/preview-sqlite）
+[[plugin.prepend_previewers]]
+url = "*.{db,sqlite,sqlite3,db3}"
+run = 'piper -- python3 /home/lcw/.config/yazi/scripts/sqlite-preview.py "$1"'
+
+# epub（preview-epub.yazi）与 cbz/cbr（preview-cbz.yazi）的规则
+# 由 init.lua 里的 :setup() 自动注册，无需在此声明
