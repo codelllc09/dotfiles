@@ -16,6 +16,9 @@ vim.opt.smartcase = true        -- ……但搜索词含大写时恢复区分
 vim.opt.autoread = true         -- 文件在外部被改（如 AI 编辑）后自动重读
 vim.opt.confirm = true          -- 退出有未保存修改时弹确认而非直接报错
 vim.opt.scrolloff = 4           -- 光标上下各保留 4 行可见，阅读不贴边
+vim.opt.signcolumn = 'yes'      -- Git / 诊断符号栏固定显示，避免正文左右跳动
+vim.opt.laststatus = 3          -- 所有窗口共用一条底部状态栏
+vim.opt.showmode = false        -- 模式交给状态栏显示，避免重复的 -- INSERT --
 
 -- AI/外部程序改文件后，回到 nvim 自动刷新（本地有未保存修改时不覆盖）
 vim.api.nvim_create_autocmd({ 'FocusGained', 'BufEnter', 'CursorHold' }, {
@@ -65,6 +68,19 @@ vim.api.nvim_create_autocmd('FileType', {
 -- 光标停在 ![..](..) 或图片路径上按空格延迟或 \i 弹出；也可直接 nvim 打开图片文件
 vim.pack.add({ 'https://github.com/folke/snacks.nvim' })
 require('snacks').setup({
+  -- 超大文件 / 超长行自动关闭 Treesitter、LSP 等重型功能，避免查看日志或压缩 JSON 时卡顿
+  bigfile = { enabled = true },
+  -- 左侧项目树：以 nvim 当前工作目录为根，打开文件后继续保持并自动跟随
+  explorer = { replace_netrw = true },
+  picker = {
+    sources = {
+      explorer = {
+        follow_file = true,
+        auto_close = false,
+        layout = { preset = 'sidebar', preview = false },
+      },
+    },
+  },
   image = {
     doc = { inline = false, float = true },
   },
@@ -73,33 +89,260 @@ require('snacks').setup({
 vim.keymap.set('n', '<LocalLeader>i', function() require('snacks.image').hover() end, { desc = '预览光标处图片' })
 vim.keymap.set('n', '<LocalLeader>m', '<Cmd>RenderMarkdown toggle<CR>', { desc = '切换 Markdown 渲染' })
 
+-- PDF 保留两种阅读方式：直接打开时由 snacks.image 渲染页面；
+-- \t 则用 pdftotext 提取为只读文本，便于 / 搜索、y 复制。q 关闭文本并回到 PDF。
+local function open_pdf_text(path)
+  path = path or vim.api.nvim_buf_get_name(0)
+  path = path:gsub('#page=%d+$', '')
+  path = vim.fn.fnamemodify(vim.fn.expand(path), ':p')
+
+  if path == '' or path:lower():sub(-4) ~= '.pdf' then
+    vim.notify('当前缓冲区不是 PDF', vim.log.levels.WARN)
+    return
+  end
+  if vim.fn.filereadable(path) ~= 1 then
+    vim.notify('找不到 PDF：' .. path, vim.log.levels.ERROR)
+    return
+  end
+  if vim.fn.executable('pdftotext') ~= 1 then
+    vim.notify('缺少 pdftotext（由 poppler-utils 提供）', vim.log.levels.ERROR)
+    return
+  end
+
+  vim.notify('正在提取 PDF 文本…')
+  vim.system({ 'pdftotext', '-layout', '-nopgbrk', path, '-' }, { text = true }, function(result)
+    vim.schedule(function()
+      if result.code ~= 0 then
+        local message = (result.stderr or ''):gsub('%s+$', '')
+        vim.notify('PDF 文本提取失败' .. (message ~= '' and '：' .. message or ''), vim.log.levels.ERROR)
+        return
+      end
+
+      local name = 'pdf-text://' .. path
+      local bufnr = vim.fn.bufnr(name)
+      if bufnr == -1 then
+        bufnr = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_name(bufnr, name)
+      end
+
+      vim.bo[bufnr].modifiable = true
+      local text = (result.stdout or ''):gsub('\r\n', '\n')
+      local lines = vim.split(text, '\n', { plain = true })
+      if #lines > 1 and lines[#lines] == '' then table.remove(lines) end
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+      vim.bo[bufnr].buftype = 'nofile'
+      vim.bo[bufnr].bufhidden = 'wipe'
+      vim.bo[bufnr].swapfile = false
+      vim.bo[bufnr].filetype = 'text'
+      vim.bo[bufnr].modifiable = false
+      vim.bo[bufnr].readonly = true
+      vim.bo[bufnr].modified = false
+      vim.b[bufnr].pdf_source = path
+
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.opt_local.wrap = true
+      vim.opt_local.linebreak = true
+      vim.opt_local.breakindent = true
+      vim.keymap.set('n', 'q', function()
+        vim.api.nvim_buf_delete(bufnr, { force = true })
+      end, { buffer = bufnr, nowait = true, desc = '关闭 PDF 文本阅读' })
+    end)
+  end)
+end
+
+vim.api.nvim_create_user_command('PdfText', function(opts)
+  open_pdf_text(opts.args ~= '' and opts.args or nil)
+end, { nargs = '?', complete = 'file', desc = '以可搜索的只读文本打开 PDF' })
+vim.keymap.set('n', '<LocalLeader>t', open_pdf_text, { desc = 'PDF 文本阅读模式' })
+
 -- ── 插件：mini.nvim 模块化小工具（只启用用得上的模块）──
 vim.pack.add({ 'https://github.com/nvim-mini/mini.nvim' }) -- 已迁组织：旧 echasnovski 地址靠重定向，改新址免依赖
 require('mini.icons').setup()      -- 文件类型图标（render-markdown 会自动改用它）
-require('mini.files').setup()      -- 目录浏览器，支持在目录里直接新建/重命名/移动
+require('mini.files').setup({       -- 保留为备用文件操作器，目录默认交给 Snacks Explorer
+  options = { use_as_default_explorer = false },
+})
 require('mini.pick').setup()       -- 模糊查找
 require('mini.pairs').setup()      -- 括号/引号自动配对
 require('mini.surround').setup()   -- 环绕编辑：sa 加、sd 删、sr 换
 require('mini.trailspace').setup() -- 行尾空格高亮，:MiniTrailspace.trim 一键清理
+require('mini.bracketed').setup({
+  -- [c / ]c 留给社区惯用的 Git change 跳转；注释块仍可用普通搜索移动
+  comment = { suffix = '' },
+})
+require('mini.jump2d').setup({
+  -- 默认 <CR> 会覆盖普通回车移动；改用 <Leader>j 启动屏幕内标签跳转
+  mappings = { start_jumping = '<Leader>j' },
+})
 
-vim.keymap.set('n', '<Leader>e', function()
+-- 快捷键提示：按下 Space 等前缀键后，显示当前实际生效的后续键与中文说明
+vim.pack.add({ 'https://github.com/folke/which-key.nvim' })
+require('which-key').setup({
+  preset = 'classic',
+  delay = 300,
+  spec = {
+    { '<Leader>h', group = 'Git 改动' },
+  },
+})
+
+vim.keymap.set('n', '<Leader>e', function() Snacks.explorer() end, { desc = '左侧项目树' })
+vim.keymap.set('n', '<Leader>E', function()
   local path = vim.api.nvim_buf_get_name(0) -- 定位到当前文件所在目录
   MiniFiles.open(path ~= '' and path or nil)
-end, { desc = '目录浏览器（定位当前文件）' })
+end, { desc = 'MiniFiles（定位当前文件）' })
 vim.keymap.set('n', '<Leader>f', function() MiniPick.builtin.files() end, { desc = '查找文件' })
 vim.keymap.set('n', '<Leader>b', function() MiniPick.builtin.buffers() end, { desc = '切换缓冲区' })
 vim.keymap.set('n', '<Leader>g', function() MiniPick.builtin.grep_live() end, { desc = '实时全文搜索' })
 
--- ── 插件：nvim-treesitter（只为装 json/yaml parser；markdown 系已自带）──
+-- ── Git：gitsigns.nvim（社区主流的行级改动显示 / 预览）──
+vim.pack.add({ 'https://github.com/lewis6991/gitsigns.nvim' })
+local gitsigns = require('gitsigns')
+gitsigns.setup({
+  signs = {
+    add = { text = '+' },
+    change = { text = '~' },
+    delete = { text = '-' },
+    topdelete = { text = '-' },
+    changedelete = { text = '~' },
+    untracked = { text = '?' },
+  },
+  signs_staged = {
+    add = { text = '+' },
+    change = { text = '~' },
+    delete = { text = '-' },
+    topdelete = { text = '-' },
+    changedelete = { text = '~' },
+  },
+  -- 不只显示一个细小符号：整行以低饱和背景标出，仍保留语法高亮前景色
+  linehl = true,
+  on_attach = function(bufnr)
+    local function map(mode, lhs, rhs, desc)
+      vim.keymap.set(mode, lhs, rhs, { buffer = bufnr, desc = desc })
+    end
+
+    map('n', ']c', function()
+      if vim.wo.diff then
+        vim.cmd.normal({ ']c', bang = true })
+      else
+        gitsigns.nav_hunk('next')
+      end
+    end, '下一处 Git 改动')
+    map('n', '[c', function()
+      if vim.wo.diff then
+        vim.cmd.normal({ '[c', bang = true })
+      else
+        gitsigns.nav_hunk('prev')
+      end
+    end, '上一处 Git 改动')
+    map('n', '<Leader>hp', gitsigns.preview_hunk, '弹窗预览 Git 改动')
+    map('n', '<Leader>hi', gitsigns.preview_hunk_inline, '行内预览 Git 改动')
+    map('n', '<Leader>hb', function() gitsigns.blame_line({ full = true }) end, '查看当前行 Git 归属')
+    map('n', '<Leader>hd', gitsigns.diffthis, '与 Git 暂存区比较')
+    map('n', '<Leader>hD', function() gitsigns.diffthis('~') end, '与上一次提交比较')
+  end,
+})
+
+-- Catppuccin Mocha：符号用清晰的绿 / 蓝 / 红，整行背景只轻微着色
+vim.api.nvim_set_hl(0, 'GitSignsAdd', { fg = '#a6e3a1', bold = true })
+vim.api.nvim_set_hl(0, 'GitSignsChange', { fg = '#89b4fa', bold = true })
+vim.api.nvim_set_hl(0, 'GitSignsDelete', { fg = '#f38ba8', bold = true })
+vim.api.nvim_set_hl(0, 'GitSignsUntracked', { fg = '#94e2d5', bold = true })
+vim.api.nvim_set_hl(0, 'GitSignsAddLn', { bg = '#26332d' })
+vim.api.nvim_set_hl(0, 'GitSignsChangeLn', { bg = '#252b3a' })
+vim.api.nvim_set_hl(0, 'GitSignsDeleteLn', { bg = '#382832' })
+vim.api.nvim_set_hl(0, 'GitSignsUntrackedLn', { bg = '#243438' })
+-- 已暂存改动使用相同符号但颜色更暗，仍能和工作区改动区分
+vim.api.nvim_set_hl(0, 'GitSignsStagedAdd', { fg = '#6f9870', bold = true })
+vim.api.nvim_set_hl(0, 'GitSignsStagedChange', { fg = '#607da9', bold = true })
+vim.api.nvim_set_hl(0, 'GitSignsStagedDelete', { fg = '#a05d72', bold = true })
+vim.api.nvim_set_hl(0, 'GitSignsStagedAddLn', { bg = '#222b26' })
+vim.api.nvim_set_hl(0, 'GitSignsStagedChangeLn', { bg = '#222632' })
+vim.api.nvim_set_hl(0, 'GitSignsStagedDeleteLn', { bg = '#30242a' })
+
+-- ── 状态栏：lualine.nvim（模式 / Git / 诊断 / 文件 / 位置）──
+vim.pack.add({ 'https://github.com/nvim-lualine/lualine.nvim' })
+local mocha = {
+  base = '#1e1e2e', mantle = '#181825', surface0 = '#313244', surface1 = '#45475a',
+  text = '#cdd6f4', subtext0 = '#a6adc8', blue = '#89b4fa', green = '#a6e3a1',
+  mauve = '#cba6f7', red = '#f38ba8', peach = '#fab387',
+}
+local lualine_theme = {
+  normal = {
+    a = { fg = mocha.base, bg = mocha.blue, gui = 'bold' },
+    b = { fg = mocha.text, bg = mocha.surface1 },
+    c = { fg = mocha.text, bg = mocha.mantle },
+  },
+  insert = { a = { fg = mocha.base, bg = mocha.green, gui = 'bold' } },
+  visual = { a = { fg = mocha.base, bg = mocha.mauve, gui = 'bold' } },
+  replace = { a = { fg = mocha.base, bg = mocha.red, gui = 'bold' } },
+  command = { a = { fg = mocha.base, bg = mocha.peach, gui = 'bold' } },
+  inactive = {
+    a = { fg = mocha.subtext0, bg = mocha.mantle },
+    b = { fg = mocha.subtext0, bg = mocha.mantle },
+    c = { fg = mocha.subtext0, bg = mocha.mantle },
+  },
+}
+
+local function current_directory()
+  local path = vim.fn.fnamemodify(vim.fn.getcwd(), ':~')
+  if #path > 32 then path = vim.fn.pathshorten(path) end
+  return '  ' .. path
+end
+
+require('lualine').setup({
+  options = {
+    theme = lualine_theme,
+    globalstatus = true,
+    component_separators = { left = '│', right = '│' },
+    section_separators = { left = '', right = '' },
+  },
+  sections = {
+    lualine_a = { 'mode' },
+    lualine_b = {
+      'branch',
+      { 'diff', symbols = { added = '+', modified = '~', removed = '-' } },
+    },
+    lualine_c = {
+      { current_directory, color = { fg = mocha.mauve } },
+      { 'filename', path = 1, symbols = { modified = ' ●', readonly = ' ', unnamed = '[无名]', newfile = '[新文件]' } },
+    },
+    lualine_x = {
+      { 'diagnostics', symbols = { error = 'E:', warn = 'W:', info = 'I:', hint = 'H:' } },
+      'filetype',
+    },
+    lualine_y = { 'progress' },
+    lualine_z = { 'location' },
+  },
+  inactive_sections = {
+    lualine_a = {}, lualine_b = {},
+    lualine_c = { { 'filename', path = 1 } },
+    lualine_x = { 'location' }, lualine_y = {}, lualine_z = {},
+  },
+})
+
+-- ── 插件：nvim-treesitter（常见文本 / 配置 / 代码格式）──
 -- 0.11+ 高亮/折叠由 nvim 内置引擎接管，旧式 setup({highlight=...}) 已废弃
 vim.pack.add({ 'https://github.com/nvim-treesitter/nvim-treesitter' })
--- parser 声明式安装：新机器部署后自动补齐（已装则跳过、无网络动作）。
+-- Neovim 自带 c/lua/markdown/query/vim/vimdoc；其余 parser 声明式安装：
+-- 新机器部署后自动补齐（已装则跳过、无网络动作）。
 -- 注意：vim.pack.update() 升级本插件后需跑 :TSUpdate 同步 parser 版本
-require('nvim-treesitter').install({ 'json', 'yaml' })
+require('nvim-treesitter').install({
+  -- 常用脚本与配置
+  'bash', 'python', 'json', 'yaml', 'toml', 'ini', 'regex',
+  -- Git / 构建 / 容器
+  'diff', 'git_config', 'git_rebase', 'gitattributes', 'gitcommit', 'gitignore',
+  'make', 'cmake', 'dockerfile', 'requirements', 'ssh_config',
+  -- Web / 数据
+  'html', 'css', 'javascript', 'typescript', 'tsx', 'sql', 'xml', 'csv', 'tsv',
+})
+
+-- 任意普通文件只要已有对应 parser，就自动启用 Treesitter 高亮和折叠；
+-- 没有 parser 的格式静默回退到 Neovim 自带的传统语法高亮。
 vim.api.nvim_create_autocmd('FileType', {
-  pattern = { 'markdown', 'json', 'jsonc', 'yaml' },
-  callback = function()
-    pcall(vim.treesitter.start) -- 高亮
+  pattern = '*',
+  callback = function(args)
+    if vim.bo[args.buf].buftype ~= '' then return end
+    local has_parser = pcall(vim.treesitter.start, args.buf)
+    if not has_parser then return end
     vim.opt_local.foldmethod = 'expr'
     vim.opt_local.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
     vim.opt_local.foldlevel = 99 -- 打开时全部展开
