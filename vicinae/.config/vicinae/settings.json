@@ -1,0 +1,13 @@
+{
+  "$schema": "https://vicinae.com/schemas/config.json",
+  "imports": [
+    "./dotfiles.json"
+  ],
+  "providers": {
+    "clipboard": {
+      "preferences": {
+        "evictionThreshold": "86400"
+      }
+    }
+  }
+}

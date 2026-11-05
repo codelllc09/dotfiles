@@ -2,6 +2,7 @@
 # 恢复 dotfiles 管理的 GNOME 全局快捷键。幂等可重跑。
 # custom0: Super+R -> Vicinae
 # custom1: Ctrl+Print -> GNOME 交互式截圖完成後進入 Gradia
+# custom2: Ctrl+Alt+V -> Vicinae 剪貼板歷史
 set -euo pipefail
 
 media_schema=org.gnome.settings-daemon.plugins.media-keys
@@ -9,6 +10,7 @@ shortcut_schema=org.gnome.settings-daemon.plugins.media-keys.custom-keybinding
 shortcut_base=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings
 vicinae_path="$shortcut_base/custom0/"
 gradia_path="$shortcut_base/custom1/"
+clipboard_path="$shortcut_base/custom2/"
 gradia_app=be.alexandervanhee.gradia
 
 for required_command in flatpak gsettings; do
@@ -26,7 +28,7 @@ else
 fi
 
 gsettings set "$media_schema" custom-keybindings \
-  "['$vicinae_path', '$gradia_path']"
+  "['$vicinae_path', '$gradia_path', '$clipboard_path']"
 
 gsettings set "$shortcut_schema:$vicinae_path" name 'Vicinae'
 gsettings set "$shortcut_schema:$vicinae_path" command 'vicinae toggle'
@@ -37,4 +39,8 @@ gsettings set "$shortcut_schema:$gradia_path" command \
   'flatpak run be.alexandervanhee.gradia --screenshot=INTERACTIVE'
 gsettings set "$shortcut_schema:$gradia_path" binding '<Primary>Print'
 
-echo '已恢復 GNOME 快捷鍵：Super+R（Vicinae）、Ctrl+Print（Gradia Screenshot）'
+gsettings set "$shortcut_schema:$clipboard_path" name 'Vicinae Clipboard History'
+gsettings set "$shortcut_schema:$clipboard_path" command 'vicinae cmd launch clipboard:history'
+gsettings set "$shortcut_schema:$clipboard_path" binding '<Control><Alt>V'
+
+echo '已恢復 GNOME 快捷鍵：Super+R（Vicinae）、Ctrl+Print（Gradia Screenshot）、Ctrl+Alt+V（Vicinae 剪貼板歷史）'
