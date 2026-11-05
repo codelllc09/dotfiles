@@ -15,7 +15,6 @@ for bash_config_file in \
   "$bash_config_dir/aliases.bash" \
   "$bash_config_dir/navigation.bash" \
   "$bash_config_dir/fuzzy.bash" \
-  "$bash_config_dir/gsel.bash" \
   "$bash_config_dir/prompt.bash"
 do
   [ -r "$bash_config_file" ] && source "$bash_config_file"

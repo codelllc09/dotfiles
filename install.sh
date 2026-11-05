@@ -3,7 +3,7 @@
 # 新增包 = 建同名目录、按真实路径摆放文件、重跑本脚本。
 # 保护规则：目标处若已存在"真实文件"（非 symlink）则跳过并提示，
 # 先手动 mv 进包目录再重跑。
-# 需要手動安裝 curl tar xz fzf zoxide gpaste gnome-shell-extension-gpaste vicinae（Terra 倉庫），例如在federa則執行`sudo install ...`
+# 需要手動安裝 curl tar xz fzf zoxide vicinae（Terra 倉庫），例如在federa則執行`sudo install ...`
 
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -53,7 +53,7 @@ install_blesh() {
 
 report_optional_shell_tools() {
   local tool
-  for tool in fzf zoxide starship gpaste-client; do
+  for tool in fzf zoxide starship; do
     if ! command -v "$tool" >/dev/null 2>&1; then
       echo "提示：未安装 $tool；相关 Bash 功能会静默跳过。" >&2
     fi

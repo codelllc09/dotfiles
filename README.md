@@ -58,11 +58,9 @@ bash/
   .config/bash/aliases.bash           → 个人 alias
   .config/bash/navigation.bash        → zoxide 目录导航
   .config/bash/fuzzy.bash             → fzf 快捷键后备配置
-  .config/bash/gsel.bash              → GPaste 剪貼板歷史（Alt+V/G 選條插入命令行）
   .config/bash/line-editor.bash       → ble.sh detached 预加载
   .config/bash/prompt.bash            → Starship 提示符
   .config/blesh/init.sh               → ble.sh 的 fzf 与 bash-preexec 相容整合
-  .local/bin/gsel                     → 命令行剪貼板歷史選擇器（fzf 選條設爲當前剪貼板）
 
 emacs/
   .emacs.d/init.el                    → ~/.emacs.d/init.el（啟動、套件清單、模組載入）
@@ -175,10 +173,9 @@ Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；�
 
 ble.sh 的程式檔屬於外部依賴，不進 dotfiles；`install.sh` 會在尚未安裝時從
 官方 nightly release 下載至 `${XDG_DATA_HOME:-~/.local/share}/blesh`，重跑時保留
-既有安裝。下載需要 `curl`、`tar` 與 `xz`。fzf、zoxide、Starship、GPaste
-（`gpaste` + `gnome-shell-extension-gpaste`，提供剪貼板歷史，`gsel` 與
-Alt+V/G 依賴它）仍由系統或
+既有安裝。下載需要 `curl`、`tar` 與 `xz`。fzf、zoxide、Starship 仍由系統或
 各自安裝器管理；缺少時部署腳本會提示，對應 Bash 模組則靜默跳過。
+（剪貼板歷史已改由 Vicinae 承擔，終端外 Ctrl+Alt+V 打開；GPaste/gsel 已退役。）
 
 ## 日常
 
