@@ -78,6 +78,9 @@ require('render-markdown').setup({
       file = { icon = '\u{f07b} ', pattern = '^[^:]+/' },   -- 本地路径 → 文件夹
       zhihu = { icon = '\u{eeba} ', pattern = 'zhihu%.com', kind = 'url' },
       wechat = { icon = '\u{f0611} ', pattern = 'weixin%.qq%.com', kind = 'url' },
+      qq = { icon = '\u{f1d6} ', pattern = 'qq%.com', kind = 'url' },
+      weibo = { icon = '\u{f18a} ', pattern = 'weibo%.com', kind = 'url' },
+      alipay = { icon = '\u{eebc} ', pattern = 'alipay%.com', kind = 'url' },
       telegram = { icon = '\u{f2c6} ', pattern = 't%.me', kind = 'url' },
       docker = { icon = '\u{f21f} ', pattern = 'docker%.com', kind = 'url' },
       npm = { icon = '\u{e71e} ', pattern = 'npmjs%.com', kind = 'url' },
