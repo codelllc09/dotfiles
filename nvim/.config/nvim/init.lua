@@ -76,7 +76,6 @@ require('render-markdown').setup({
     custom = {
       web = { icon = '\u{f0ac} ', pattern = '^http' },     -- 普通网站 → 地球
       file = { icon = '\u{f07b} ', pattern = '^[^:]+/' },   -- 本地路径 → 文件夹
-      zhihu = { icon = '\u{eeba} ', pattern = 'zhihu%.com', kind = 'url' },
       wechat = { icon = '\u{f0611} ', pattern = 'weixin%.qq%.com', kind = 'url' },
       qq = { icon = '\u{f1d6} ', pattern = 'qq%.com', kind = 'url' },
       weibo = { icon = '\u{f18a} ', pattern = 'weibo%.com', kind = 'url' },
