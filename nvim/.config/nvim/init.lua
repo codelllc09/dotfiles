@@ -38,19 +38,81 @@ require('render-markdown').setup({
   html = { enabled = false },
   latex = { enabled = false },
   yaml = { enabled = false },
-  -- 代码块加一圈细边框（高亮组在下方 setup 之后统一设定）
-  code = { border = 'thin' },
+  -- 代码块：浑然一体的面板（Obsidian 风）——顶部语言标签嵌在面板内，
+  -- 上下边条复用面板底色，不再出现独立的两根 bar
+  code = {
+    border = 'thick',
+    highlight_border = 'RenderMarkdownCode',
+    language_icon = true,                      -- 语言图标：上面 mini.icons 里的经典字形
+    highlight_language = 'RenderMarkdownCodeLanguage',
+    sign = false,                              -- sign 列不再显示语言符号
+    language_pad = 1,
+    left_pad = 2,
+  },
+  -- 标题：𝓱₁~𝓱₆ 花体字母 + 下标级别数字（如变量带指标，重心低不飘）
+  -- 字母𝓱由 WezTerm 回退到 STIX Two Math 渲染，下标数字由 Maple Mono 渲染；
+  -- markdown 规范最多 6 级，####### 不算标题
+  heading = {
+    icons = {
+      '\u{1d4f1}\u{2081} ', '\u{1d4f1}\u{2082} ', '\u{1d4f1}\u{2083} ',
+      '\u{1d4f1}\u{2084} ', '\u{1d4f1}\u{2085} ', '\u{1d4f1}\u{2086} ',
+    },
+    position = 'inline',
+    width = 'full',
+    foregrounds = {
+      'RenderMarkdownH1Icon', 'RenderMarkdownH2Icon', 'RenderMarkdownH3Icon',
+      'RenderMarkdownH4Icon', 'RenderMarkdownH5Icon', 'RenderMarkdownH6Icon',
+    },
+    backgrounds = {
+      'RenderMarkdownH1', 'RenderMarkdownH2', 'RenderMarkdownH3',
+      'RenderMarkdownH4', 'RenderMarkdownH5', 'RenderMarkdownH6',
+    },
+  },
+  -- 链接图标：内置已带 GitHub/GitLab/Google/Stack Overflow/YouTube/Reddit/Wikipedia/X/
+  -- Neovim/Apple/Discord/HN/LinkedIn/Microsoft/Slack/Steam 官方图标；
+  -- 这里统一地球兑底，补国内常用站，本地路径用文件夹
+  link = {
+    hyperlink = '\u{f0ac} ',  -- fa-globe 地球（非 http 链接的兑底）
+    custom = {
+      web = { icon = '\u{f0ac} ', pattern = '^http' },     -- 普通网站 → 地球
+      file = { icon = '\u{f07b} ', pattern = '^[^:]+/' },   -- 本地路径 → 文件夹
+      zhihu = { icon = '\u{eeba} ', pattern = 'zhihu%.com', kind = 'url' },
+      wechat = { icon = '\u{f0611} ', pattern = 'weixin%.qq%.com', kind = 'url' },
+      telegram = { icon = '\u{f2c6} ', pattern = 't%.me', kind = 'url' },
+      docker = { icon = '\u{f21f} ', pattern = 'docker%.com', kind = 'url' },
+      npm = { icon = '\u{e71e} ', pattern = 'npmjs%.com', kind = 'url' },
+      medium = { icon = '\u{f23a} ', pattern = 'medium%.com', kind = 'url' },
+      rust = { icon = '\u{e7a8} ', pattern = 'rust%-lang%.org', kind = 'url' },
+      crates = { icon = '\u{e7a8} ', pattern = 'crates%.io', kind = 'url' },
+    },
+  },
 })
 
 -- 区分代码块与行内代码的底色（默认两者同用 ColorColumn，看不出区别；
 -- 色值取自终端的 Catppuccin Mocha：块=深色面板，行内=浅色小块）
-vim.api.nvim_set_hl(0, 'RenderMarkdownCode', { bg = '#181825' })       -- 代码块背景（mantle）
-vim.api.nvim_set_hl(0, 'RenderMarkdownCodeBorder', { bg = '#45475a' }) -- 代码块边框（surface1）
+vim.api.nvim_set_hl(0, 'RenderMarkdownCode', { bg = '#24273a' })       -- 代码块面板（macchiato base，黑底终端上可见）
+vim.api.nvim_set_hl(0, 'RenderMarkdownCodeLanguage', { fg = '#6c7086', italic = true }) -- 语言标签：overlay0 弱灰斜体，对比度约 2.9:1，安安静静退后
 vim.api.nvim_set_hl(0, 'RenderMarkdownCodeInline', { bg = '#313244' }) -- 行内代码背景（surface0）
 -- ==高亮== 用荧光笔黄（Obsidian 惯例；黄取 Catppuccin Mocha yellow，深色字保证可读）
 -- 想要多彩高亮可按前缀扩展，如 ==!红== ：
 --   setup({ inline_highlight = { custom = { important = { prefix = '!', highlight = 'MdHlRed' } } } })
 vim.api.nvim_set_hl(0, 'RenderMarkdownInlineHighlight', { bg = '#f9e2af', fg = '#1e1e2e' })
+-- 标题彩虹底色带：赤橙黄绿青蓝（markdown 只有 h1~h6，紫色排不上号）
+-- 色值按与正文 #cdd6f4 对比度 ≥ 4:1 挑选，标题加粗白字依然清晰
+vim.api.nvim_set_hl(0, 'RenderMarkdownH1', { bg = '#7e3a45' }) -- 红
+vim.api.nvim_set_hl(0, 'RenderMarkdownH2', { bg = '#8a5226' }) -- 橙
+vim.api.nvim_set_hl(0, 'RenderMarkdownH3', { bg = '#6e6420' }) -- 黄
+vim.api.nvim_set_hl(0, 'RenderMarkdownH4', { bg = '#3f6f45' }) -- 绿
+vim.api.nvim_set_hl(0, 'RenderMarkdownH5', { bg = '#2f6b6b' }) -- 青
+vim.api.nvim_set_hl(0, 'RenderMarkdownH6', { bg = '#3d5f94' }) -- 蓝
+-- 前缀单独配色：Catppuccin Mocha 粉彩按色带同系提亮，与正文白字区分；
+-- 对比度均 ≥ 4:1（黄/青本色就达标，其余向白提亮 5%~35%）
+local prefix_colors = {
+  '#f5a2b9', '#fbc29f', '#f9e2af', '#aae4a6', '#94e2d5', '#b2cefc',
+}
+for i, fg in ipairs(prefix_colors) do
+  vim.api.nvim_set_hl(0, ('RenderMarkdownH%dIcon'):format(i), { fg = fg })
+end
 
 -- markdown 文件按单词软换行，长段落阅读不折行断词
 vim.api.nvim_create_autocmd('FileType', {
@@ -157,7 +219,21 @@ vim.keymap.set('n', '<LocalLeader>t', open_pdf_text, { desc = 'PDF 文本阅读�
 
 -- ── 插件：mini.nvim 模块化小工具（只启用用得上的模块）──
 vim.pack.add({ 'https://github.com/nvim-mini/mini.nvim' }) -- 已迁组织：旧 echasnovski 地址靠重定向，改新址免依赖
-require('mini.icons').setup()      -- 文件类型图标（render-markdown 会自动改用它）
+require('mini.icons').setup({
+  -- 文件类型图标：固定用经典 nerd font 字形（mini.icons 对 sh 的兜底字形在会话间不一致）。
+  -- 颜色用 mini.icons 内置色板，文件树等处生效
+  filetype = {
+    sh =       { glyph = '\u{e691}', hl = 'MiniIconsGreen' },  -- seti-shell 终端提示符
+    bash =     { glyph = '\u{e760}', hl = 'MiniIconsGreen' },  -- dev-bash
+    lua =      { glyph = '\u{e620}', hl = 'MiniIconsBlue' },   -- seti-lua 月亮
+    python =   { glyph = '\u{e73c}', hl = 'MiniIconsYellow' }, -- dev-python 双蛇
+    json =     { glyph = '\u{e80b}', hl = 'MiniIconsYellow' }, -- dev-json 花括号
+    yaml =     { glyph = '\u{e8eb}', hl = 'MiniIconsRed' },    -- dev-yaml
+    toml =     { glyph = '\u{e6b2}', hl = 'MiniIconsGrey' },   -- custom-toml 齿轮
+    markdown = { glyph = '\u{e609}', hl = 'MiniIconsBlue' },   -- seti-markdown m↓
+    vim =      { glyph = '\u{e7c5}', hl = 'MiniIconsGreen' },  -- dev-vim 菱形
+  },
+})
 require('mini.files').setup({       -- 保留为备用文件操作器，目录默认交给 Snacks Explorer
   options = { use_as_default_explorer = false },
 })
