@@ -1,0 +1,105 @@
+#!/bin/bash
+# 產生 Dolphin 在 GNOME 下用的視窗按鈕風格（GNOME 的 – □ ✕）。冪等可重跑。
+#
+# 背景：Qt 的 Adwaita 視窗裝飾外掛會畫 GNOME 式圓形按鈕底，但按鈕符號是向
+# Qt 圖示主題查詢 window-*-symbolic；KDE 程式裡 Qt 圖示主題固定為 "breeze"，
+# 而 Breeze 的 window-*-symbolic 是 chevron（⌄ ⌃），不是 GNOME 的 – □ ✕。
+# 這裡在使用者圖示目錄建一個「breeze 影子主題」：所有目錄 symlink 到系統
+# Breeze，只覆寫 4 個視窗按鈕圖示為 Adwaita（GNOME）版本。
+#
+# KDE 圖示主題（Papirus-Dark）是文字設定，由倉庫裡的 ~/.config/kdeglobals 管理，
+# 本腳本只負責補齊非文字資源。
+#
+# 需求：Papirus 圖示（sudo dnf install papirus-icon-theme papirus-icon-theme-dark）
+# 用法：dolphin-gnome-restore [--uninstall]
+set -euo pipefail
+
+data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+breeze_src=/usr/share/icons/breeze
+adwaita_buttons=/usr/share/icons/Adwaita/symbolic/ui
+shadow="$data_home/icons/breeze"
+marker="$shadow/gnome-wc-22"
+sizes=(16 22 24 32 48)
+buttons=(window-minimize-symbolic window-maximize-symbolic
+         window-restore-symbolic window-close-symbolic)
+
+usage() {
+  echo "用法: ${0##*/} [--uninstall]" >&2
+  exit 2
+}
+
+if [ "${1:-}" = "--uninstall" ]; then
+  if [ -d "$marker" ]; then
+    rm -rf -- "$shadow"
+    echo "已移除 GNOME 視窗按鈕影子主題：$shadow"
+    echo "重開 Dolphin 後按鈕會回到 Breeze 的 chevron。"
+  else
+    echo "找不到本腳本建立的影子主題，無需移除。"
+  fi
+  exit 0
+fi
+[ $# -eq 0 ] || usage
+
+# 1) Papirus 圖示：XDG data 或 /usr/share 任一處有即可
+if [ ! -r "$data_home/icons/Papirus-Dark/index.theme" ] &&
+   [ ! -r /usr/share/icons/Papirus-Dark/index.theme ]; then
+  echo "缺少 Papirus 圖示主題，請先安裝：" >&2
+  echo "  sudo dnf install papirus-icon-theme papirus-icon-theme-dark" >&2
+  echo "或把 Papirus / Papirus-Dark 手動放到 $data_home/icons/" >&2
+  exit 1
+fi
+
+# 2) 依賴的系統主題與 Adwaita 圖示來源
+for src in "$breeze_src/index.theme" "$breeze_src/actions/22" \
+           "$adwaita_buttons/window-minimize-symbolic.svg" \
+           "$adwaita_buttons/window-maximize-symbolic.svg" \
+           "$adwaita_buttons/window-restore-symbolic.svg" \
+           "$adwaita_buttons/window-close-symbolic.svg"; do
+  if [ ! -e "$src" ]; then
+    echo "找不到 $src；本腳本依賴系統 Breeze 與 Adwaita 圖示主題。" >&2
+    exit 1
+  fi
+done
+
+# 3) 安全檢查：只重建本腳本建立的目錄，避免蓋掉真正的使用者主題
+if [ -e "$shadow" ] && [ ! -d "$marker" ]; then
+  echo "$shadow 已存在但不是本腳本建立的，停止以免覆蓋。" >&2
+  echo "請先確認那是什麼，或手動移除後重跑。" >&2
+  exit 1
+fi
+rm -rf -- "$shadow"
+mkdir -p "$shadow"
+
+for size in "${sizes[@]}"; do
+  mkdir -p "$shadow/gnome-wc-$size"
+  for button in "${buttons[@]}"; do
+    cp "$adwaita_buttons/$button.svg" "$shadow/gnome-wc-$size/$button.svg"
+  done
+done
+
+# 4) 其餘目錄 symlink 到系統 Breeze
+for entry in "$breeze_src"/*; do
+  [ "$(basename "$entry")" = "index.theme" ] && continue
+  ln -sfn "$entry" "$shadow/$(basename "$entry")"
+done
+
+# 5) index.theme：複製系統 Breeze 的，把覆寫目錄插到 Directories 最前面
+custom_csv=""
+for size in "${sizes[@]}"; do
+  custom_csv+="${custom_csv:+,}gnome-wc-$size"
+done
+{
+  while IFS= read -r line; do
+    if [[ $line == Directories=* ]]; then
+      printf 'Directories=%s,%s\n' "$custom_csv" "${line#Directories=}"
+    else
+      printf '%s\n' "$line"
+    fi
+  done < "$breeze_src/index.theme"
+  for size in "${sizes[@]}"; do
+    printf '[gnome-wc-%s]\nContext=Actions\nSize=%s\nType=Fixed\n\n' "$size" "$size"
+  done
+} > "$shadow/index.theme"
+
+echo "已建立 GNOME 視窗按鈕影子主題：$shadow"
+echo "重開 Dolphin 後生效。"

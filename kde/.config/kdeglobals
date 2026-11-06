@@ -1,0 +1,6 @@
+[General]
+TerminalApplication=wezterm
+TerminalService=org.wezfurlong.wezterm.desktop
+
+[Icons]
+Theme=Papirus-Dark

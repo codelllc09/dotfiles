@@ -3,7 +3,7 @@
 單一真相倉庫 + symlink 農場。佈局相容 GNU Stow（`sudo dnf install stow`
 後可用 `stow wezterm` 取代 install.sh）。
 
-## 已驗證環境快照（2026-09-04）
+## 已驗證環境快照（2026-09-04；2026-11-07 追加 Dolphin）
 
 本倉庫配置與下列版本深度耦合（尤其 wezterm nightly 和 rime 自癒邏輯），
 跨發行版/跨大版本**不保證可用**，系統大版本升級後請按下方清單驗收：
@@ -19,6 +19,7 @@
 | 輸入法 | ibus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
 | 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底；斜體楷體用 LXGW WenKai Mono（GitHub lxgw/LxgwWenKai v1.530，手動下載至 ~/.local/share/fonts，不入庫） |
 | 文件管理器 | yazi 26.9.1（插件由 ya pkg 管理）+ swayimg 5.6 / ffmpegthumbnailer 2.3（dnf；畫廊式看圖與視頻首幀） |
+| 檔案管理器（GUI） | Dolphin 26.08.1（Qt 6.11 / KF6；GNOME 風格：Papirus-Dark 圖示 + Adwaita 視窗按鈕，見 kde 段） |
 | 啟動器 | vicinae 0.29.2（Terra 倉庫；Wayland 熱鍵走 GNOME 自定義快捷鍵，見 vicinae 段） |
 | 截圖標註 | Gradia 1.14.0（Flathub；`Ctrl+Print` 走 GNOME 自定義快捷鍵，截圖後自動進入標註） |
 | 頂欄監控 | GNOME Shell 擴展 Astra Monitor v43（EGO 62；配置經 dconf 入庫，見 gnome 段） |
@@ -34,6 +35,8 @@
    （gnome-shell/mutter/ibus 版本敏感），升級後若行爲異常先看那裏
 4. Fedora 大版本升級後：ibus-rime 的 userdb 建議先 `rime_deployer --sync`
    再動配置，避免詞庫損傷
+5. Fedora/GNOME 大版本升級後：重跑 `~/.local/bin/dolphin-gnome-restore`，
+   開 Dolphin 確認視窗按鈕仍是 – □ ✕（Adwaita 圖示路徑可能搬家）
 
 ## 佈局
 
@@ -92,6 +95,11 @@ gnome/
   .config/gnome-extensions/astra-monitor.dconf → Astra Monitor 的 dconf 非默認鍵快照（dconf dump 產物，改設置後需重新 dump）
   .local/bin/gnome-shortcuts-restore           → 安裝 Gradia 並恢復 Vicinae/Gradia 的 GNOME 全局快捷鍵
   .local/bin/astra-monitor-restore             → 一鍵恢復：裝擴展 → dconf load → 啓用（冪等）
+
+kde/
+  .config/kdeglobals                  → KDE 全域設定：`[Icons] Theme=Papirus-Dark`（KConfig 寫入會跟隨軟鏈，見下文）
+  .config/dolphinrc                   → Dolphin 設定（MenuBar=Disabled 等；`Version`/`ViewPropsTimestamp` 是 KDE 會更新的 state 值）
+  .local/bin/dolphin-gnome-restore    → 產生 GNOME 視窗按鈕用的 breeze 影子主題（冪等；`--uninstall` 還原）
 ```
 
 v4 模塊化（2026-09-04）：原 476 行單文件按功能拆成上述模塊（教訓：單文件
@@ -176,6 +184,30 @@ ble.sh 的程式檔屬於外部依賴，不進 dotfiles；`install.sh` 會在尚
 既有安裝。下載需要 `curl`、`tar` 與 `xz`。fzf、zoxide、Starship 仍由系統或
 各自安裝器管理；缺少時部署腳本會提示，對應 Bash 模組則靜默跳過。
 （剪貼板歷史已改由 Vicinae 承擔，終端外 Ctrl+Alt+V 打開；GPaste/gsel 已退役。）
+
+Dolphin 是 GNOME 桌面上的 KDE 檔案管理器（Dolphin 26.08.1 / Qt 6.11 / KF6）。
+Fedora 44 的 Qt 在 GNOME 下會自動採用 GTK3 平台主題（字型、深色配色、游標）與
+Adwaita 視窗裝飾，所以真正不一致的只剩圖示與視窗按鈕符號。處理分兩層：
+
+- **文字設定**入 `kdeglobals`（`[Icons] Theme=Papirus-Dark`）與 `dolphinrc`
+  （`[MainWindow] MenuBar=Disabled` 等），由 `install.sh` symlink 部署。
+  KConfig 保存設定時（`kwriteconfig6` 對兩個檔案實測）會**跟隨**軟鏈寫入目標，
+  不會像 Electron 類 GUI 用「臨時檔+原子替換」把軟鏈換成真文件。若哪天發現
+  設定檔變成真文件，把真文件 mv 回 `kde/.config/` 再跑 `install.sh` 即可。
+  `dolphinrc` 的 `Version`/`ViewPropsTimestamp` 由 Dolphin 自動更新，屬 state；
+  提交前 `git diff` 確認，只提交有意義的設定變更。
+- **非文字資源**由 `~/.local/bin/dolphin-gnome-restore` 重建（冪等）：
+  1. 檢查 Papirus 圖示主題：`sudo dnf install papirus-icon-theme papirus-icon-theme-dark`，
+     或手動放到 `~/.local/share/icons/`；主題本體約 400MB，**不入庫**；
+  2. 在 `~/.local/share/icons/breeze` 建一個 breeze **影子主題**（152KB）：所有目錄
+     symlink 回系統 Breeze，只把 4 個 `window-{minimize,maximize,restore,close}-symbolic.svg`
+     覆寫成 Adwaita（GNOME）的 – □ ✕。原因是 Qt 的 Adwaita 窗框外掛按鈕符號取自
+     Qt 圖示主題 `breeze`，而 Breeze 的 window-*-symbolic 是 chevron（⌄ ⌃）；
+     另 `adwaita-qt6` 已不建議（Fedora 44 無套件、上游年久失修）。
+
+新機恢復：`~/.local/bin/dolphin-gnome-restore`（Papirus 缺會提示 dnf 指令），重開 Dolphin 生效。
+同步方式：改圖示/按鈕後 `git -C ~/dotfiles status` 確認 `kde/.config/kdeglobals` 變更；
+影子主題屬產生檔，不入庫。還原按鈕：`~/.local/bin/dolphin-gnome-restore --uninstall`。
 
 ## 日常
 
