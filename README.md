@@ -38,6 +38,21 @@
 5. Fedora/GNOME 大版本升級後：重跑 `~/.local/bin/dolphin-gnome-restore`，
    開 Dolphin 確認視窗按鈕仍是 – □ ✕（Adwaita 圖示路徑可能搬家）
 
+## Niri 與 Noctalia
+
+`niri` 管理 `config.kdl`，`noctalia` 管理頂欄、`panel-status` 插件與屏保腳本。
+部署可用 `stow niri noctalia`（在倉庫根目錄執行），或沿用 `install.sh`。
+Noctalia GUI 的調整存於 `~/.local/state/noctalia/settings.toml`，同名設定以該檔為準。
+
+新機需安裝 Niri、Noctalia、Fcitx 5 Rime 與 mpv。屏保素材放在 `~/Videos/screensaver.mp4`。
+中英文指示需用 C 編譯器、pkg-config 和 GLib 開發檔（Fedora 的 `gcc`、`pkgconf-pkg-config`、`glib2-devel`）重建：
+
+```bash
+mkdir -p ~/.local/libexec
+cc -O2 ~/.local/share/noctalia/plugins/panel-status/fcitx-mode.c \
+  $(pkg-config --cflags --libs gio-2.0) -o ~/.local/libexec/waybar-fcitx-mode
+```
+
 ## 佈局
 
 每個工具一個「包」目錄，內部結構 = 家目錄相對路徑：

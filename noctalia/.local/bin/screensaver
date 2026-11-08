@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# screensaver — 泡泡屏保（mpv 全屏循環，Noctalia 閒置 10 分鐘觸發，活動即殺）
+# 素材替換：直接覆蓋 ~/Videos/screensaver.mp4 即可，零配置改動
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+exec mpv \
+  --really-quiet \
+  --fullscreen \
+  --loop-file=inf \
+  --title=saver \
+  --no-osd-bar \
+  --no-input-default-bindings \
+  --no-input-cursor \
+  --cursor-autohide=always \
+  "$HOME/Videos/screensaver.mp4"

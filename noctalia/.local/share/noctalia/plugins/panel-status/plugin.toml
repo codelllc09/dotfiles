@@ -1,0 +1,14 @@
+id = "lcw/panel-status"
+name = "Panel Status"
+version = "1.0.0"
+plugin_api = 32
+author = "lcw"
+description = "Fcitx Rime mode and stacked network speed"
+
+[[widget]]
+id = "input"
+entry = "input.luau"
+
+[[widget]]
+id = "network"
+entry = "network.luau"
