@@ -1,84 +1,127 @@
--- rime.lua — Rime 輸入法聯動：徽章 / 游標色 / IME 自動癒合
--- 从主配置拆出（v4 模块化）；坏了只丢徽章和游标色，不影响其它。
--- setup(config) 必须在主配置里先调用（游标色 override 需要 tab_bar 配色引用）
---
--- 接口：
---   M.setup(config) → 注入主 config 引用（游标色 override 时保留 tab_bar 配色）
---   M.badge()       → 焦点 tab 徽章字形（'·'/西文，'◇'/简中，'◆'/繁中）
--- 内部行为（拆进来时就有的三件事）：
---   ① update-right-status：读会话运行目录中的 rime-mode → 游标变色
---      （2026-09-09 加固：copy/search 層內門禁跳過 + 1s 防抖合併——層內
---        call_after 定時器不再被重求值誤殺，快速切換不再連環重載）
---   ② ime_heal：window-focus/update-right-status 时检测 ibus 引擎被覆盖成 xkb → 自动恢复
---   ③ 徽章字形替换：简◇繁◆（1 格宽，防药丸随输入法切换抖动）
+-- Rime 聯動：Fcitx5 的啟用狀態 + Rime 的中英、簡繁與大小寫。
 local wezterm = require 'wezterm'
 local M = {}
-local config_ref = nil
+local config_ref
+local focus
+local is_gnome = (os.getenv('XDG_CURRENT_DESKTOP') or ''):find('GNOME', 1, true)
 local runtime_dir = os.getenv('XDG_RUNTIME_DIR') or '/tmp'
-local rime_mode_file = runtime_dir .. '/rime-mode'
+local mode_file = runtime_dir .. '/rime-mode'
+
+local CURSOR_COLORS = {
+  a = '#ccf5d7',
+  A = '#0b6645',
+  ['汉'] = '#f472b6',
+  ['漢'] = '#e64553',
+}
+local BADGE_GLYPH = { ['汉'] = '◇', ['漢'] = '◆' }
+-- 左欄只用零寬的樣式控制碼觸發重繪，工作區仍用右欄。
+local BADGE_REDRAW = {
+  a = '\x1b[32m',
+  A = '\x1b[92m',
+  ['汉'] = '\x1b[35m',
+  ['漢'] = '\x1b[31m',
+  ['·'] = '',
+}
 
 function M.setup(config)
   config_ref = config
 end
 
--- 光标颜色随输入模式（Rime 推送 set-tab-title 会连带触发本事件）
--- 绿=西文可输命令，红=中文；浅/深 = 小写/简体 vs 大写(Caps)/繁体
-local CURSOR_COLORS = {
-  ['a'] = '#ccf5d7', -- 亮薄荷绿: 西文
-  ['A'] = '#0b6645', -- 墨绿: 西文(CapsLock)
-  ['汉'] = '#f472b6', -- 粉色: 简中
-  ['漢'] = '#e64553', -- 深红: 繁中
-}
-wezterm.GLOBAL.rime_cursor_color = nil
-wezterm.GLOBAL.rime_cursor_at = 0
-wezterm.on('update-right-status', function(window, pane)
-  -- ── 2026-09-09 加固兩件套(重載風暴消音,保留變色)──
-  -- ① 模式門禁:copy/search 層內一律不 override。set_config_overrides 的全量
-  --    重求值會殺光 pending call_after(搜索態 Esc 落位清選區 80ms 定時器等
-  --    會被殺→選區賴着不走)。閱讀/抄取時不會切 IME;出層後顏色自動追平
-  local kt = select(2, pcall(function() return window:active_key_table() end))
-  if kt == 'copy_mode' or kt == 'search_mode' then return end
-  local f = io.open(rime_mode_file, 'r')
-  if not f then return end
-  local s = f:read('*l'); f:close()
-  local color = CURSOR_COLORS[s]
-  if not color or color == wezterm.GLOBAL.rime_cursor_color then return end -- 同色防抖
-  -- ② 防抖合併:1 秒內的後續變更跳過本次(不更新存色)→下個 urs tick
-  --    重檢重試,窗口過後必然追平(自愈;os.time 秒級粒度,同 ime_heal 範式)
-  local now = os.time()
-  if now - (tonumber(wezterm.GLOBAL.rime_cursor_at) or 0) < 1 then return end
-  wezterm.GLOBAL.rime_cursor_at = now
-  wezterm.GLOBAL.rime_cursor_color = color
-  window:set_config_overrides {
-    colors = {
-      cursor_bg = color,
-      cursor_border = color,
-      tab_bar = config_ref and config_ref.colors and config_ref.colors.tab_bar or nil,
-    },
-  }
-end)
-
--- 徽标：焦点 tab 现读状态文件；Rime 推送立即重绘，周期事件负责兜底。
-local function rime_mode_read()
-  local f = io.open(rime_mode_file, 'r')
-  if not f then return '·' end
-  local s = f:read('*l'); f:close()
-  if s == nil or s == '' then return '·' end
-  return s
-end
-
--- 徽章字形：简=◇ 繁=◆（同源异繁简，皆 1 格宽；CJK 徽章 2 格会令药丸
--- 随输入法切换抖动，故在显示层替换。rime 协议与游标色键名不变）
-local BADGE_GLYPH = {
-  ['汉'] = '◇',
-  ['漢'] = '◆',
-}
-local function rime_badge()
-  local mode = rime_mode_read()
+function M.badge(window_id)
+  local indicator = wezterm.GLOBAL.rime_indicator
+  local mode = indicator and indicator.window_id == window_id and indicator.mode or '·'
   return BADGE_GLYPH[mode] or mode
 end
 
-M.badge = rime_badge
+local function read_mode()
+  local f = io.open(mode_file, 'r')
+  if not f then return '·' end
+  local mode = f:read('*l')
+  f:close()
+  return CURSOR_COLORS[mode] and mode or '·'
+end
+
+local function input_mode(window, engine)
+  if is_gnome or engine == 'rime' then return read_mode() end
+  if engine and engine:match('^keyboard%-') then
+    local _, leds = window:keyboard_modifiers()
+    return leds and leds:find('CAPS_LOCK', 1, true) and 'A' or 'a'
+  end
+  return '·'
+end
+
+local function show_badge(window, window_id, mode)
+  local indicator = wezterm.GLOBAL.rime_indicator
+  if indicator and indicator.window_id == window_id and indicator.mode == mode then return end
+  wezterm.GLOBAL.rime_indicator = { window_id = window_id, mode = mode }
+  window:set_left_status(BADGE_REDRAW[mode])
+end
+
+local function show_cursor(window, state, mode)
+  if state.cursor_mode == mode then return end
+  -- 複製／搜索時延後變色，避免設定重載打斷鍵表與定時器。
+  local key_table = window:active_key_table()
+  if key_table == 'copy_mode' or key_table == 'search_mode' then return end
+
+  local overrides = window:get_config_overrides() or {}
+  if not window:is_focused() or focus ~= state then return end
+  state.cursor_mode = mode
+  local colors = overrides.colors or {}
+  local color = CURSOR_COLORS[mode]
+  if not color then
+    -- 只清理本模組使用的配色，包括更新配置前已套用的舊顏色。
+    if colors.cursor_bg ~= colors.cursor_border then return end
+    for _, previous in pairs(CURSOR_COLORS) do
+      if colors.cursor_bg == previous then
+        local base = config_ref and config_ref.colors or {}
+        colors.cursor_bg, colors.cursor_border = base.cursor_bg, base.cursor_border
+        window:set_config_overrides(overrides)
+        return
+      end
+    end
+    return
+  end
+  if colors.cursor_bg == color and colors.cursor_border == color then return end
+  for name, value in pairs(config_ref and config_ref.colors or {}) do
+    if colors[name] == nil then colors[name] = value end
+  end
+  colors.cursor_bg, colors.cursor_border = color, color
+  overrides.colors = colors
+  window:set_config_overrides(overrides)
+end
+
+wezterm.on('update-right-status', function(window)
+  if not window:is_focused() then return end
+  local id = window:window_id()
+  if not focus or focus.id ~= id then focus = { id = id } end
+  local state = focus
+
+  local now = os.time()
+  if not is_gnome and state.probed_at ~= now then
+    state.probed_at = now
+    -- 單一非同步查詢，同時識別 Rime、直接輸入及其他引擎。
+    local called, ok, output = pcall(wezterm.run_child_process, {
+      'busctl', '--user', '--auto-start=no', '--timeout=300ms', 'call',
+      'org.fcitx.Fcitx5', '/controller', 'org.fcitx.Fcitx.Controller1', 'CurrentInputMethod',
+    })
+    if not window:is_focused() or focus ~= state then return end
+    state.engine = called and ok and output:match('^s "([^"]+)"%s*$') or nil
+  end
+  local mode = input_mode(window, state.engine)
+  show_badge(window, id, mode)
+  show_cursor(window, state, mode)
+end)
+
+wezterm.on('window-focus-changed', function(window)
+  local id = window:window_id()
+  if focus and focus.id == id then focus = nil end
+  if window:is_focused() then return end
+  local indicator = wezterm.GLOBAL.rime_indicator
+  if indicator and indicator.window_id == id then
+    wezterm.GLOBAL.rime_indicator = nil
+    window:set_left_status('')
+  end
+end)
 
 -- ── 输入法自动愈合 ──
 -- 实测环境：Fedora 44 / gnome-shell+mutter 50.0→50.4 / ibus 1.5.34-rc1→1.5.34 / wezterm 20260901 nightly
@@ -115,6 +158,8 @@ end
 -- 只挂 focus 事件（P1-2 B 档，2026-09-09）：解锁竞态/输入源切换必伴随窗口
 -- 焦点变化，检测一次不漏；摘掉 update-right-status 挂载，消掉常态下每 3s
 -- 一次的常驻 fork（GUI 线程上的同步子进程）。
-wezterm.on('window-focus-changed', function(window, pane) ime_heal() end)
+if is_gnome then
+  wezterm.on('window-focus-changed', ime_heal)
+end
 
 return M

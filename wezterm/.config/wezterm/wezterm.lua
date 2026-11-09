@@ -78,7 +78,7 @@ config.tab_bar_at_bottom = true           -- 放底部，紧邻打字区
 -- Alt+F4 關 / Super+H 最小化 / Super+↑↓ 最大化平鋪。等 #7360+ConceptFrame
 -- 復活後可重試。
 config.warn_about_missing_glyphs = false  -- 字形告警不弹窗（渲染正常时的误报）
-config.status_update_interval = 250       -- Rime 状态兜底刷新；单位毫秒
+config.status_update_interval = 250       -- 狀態欄刷新；單位毫秒
 
 -- ── 模块引入（主配置与模块统一位于 XDG 配置目录）──
 package.path = wezterm.config_dir .. '/?.lua;' .. package.path
@@ -97,13 +97,13 @@ local ce_ok, compose = pcall(require, 'compose')
 -- ── format-tab-title：标签渲染组装 ──
 -- 结构：[徽章] [状态点●] [未读n] TABn 图标 [佈局碼]
 -- 数据源（各自 pcall，坏了静默降级）：
---   rime.badge()              输入法徽章（焦点 tab 专用；非焦点固定 '·'）
+--   rime.badge(window_id)     输入法徽章（焦点 tab 专用；非焦点固定 '·'）
 --   agent_monitor.tab_dot/unread agent 状态点与 QQ 式未读计数
 --   app_icon.label(tab)       TABn 程序图标（agent_monitor.app_name → 进程名 → '·'）
 --   pane_layout.glyph(tab)    佈局碼象形字（N≥2 pane 才显示，药丸外暗灰）
 wezterm.on('format-tab-title', function(tab, tabs, panes, conf, hover, max_width)
   local badge = '·'
-  if rime_ok then pcall(function() badge = rime.badge() end) end
+  if tab.is_active and rime_ok then pcall(function() badge = rime.badge(tab.window_id) end) end
   -- TABn：位置序号（0 起转 1 起；关 tab 后自动重排）
   local tabno = '?'
   pcall(function() tabno = tostring((tab.tab_index or 0) + 1) end)
