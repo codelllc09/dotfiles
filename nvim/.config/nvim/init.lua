@@ -1,4 +1,14 @@
--- Neovim 起步配置 · 保存即生效
+-- Neovim 配置索引
+-- 搜索 @ 加章节或小节名可直达对应标题。
+--   core        基础选项、文件自动重读
+--   documents   Markdown、Snacks、PDF 文本阅读
+--   editing     mini.nvim、快捷键提示、文件和文本导航
+--   git         Neogit、状态页缩进、Gitsigns
+--   statusline  lualine 主题与布局
+--   languages   Treesitter、Python LSP
+
+-- ## @core 基础设置
+-- ### @options 快捷键前缀与编辑器选项
 -- Leader 明确化：Space 做全局 Leader（好按），LocalLeader 保持反斜杠
 vim.g.mapleader = ' '
 vim.g.maplocalleader = '\\'
@@ -20,6 +30,7 @@ vim.opt.signcolumn = 'yes'      -- Git / 诊断符号栏固定显示，避免正
 vim.opt.laststatus = 3          -- 所有窗口共用一条底部状态栏
 vim.opt.showmode = false        -- 模式交给状态栏显示，避免重复的 -- INSERT --
 
+-- ### @autoread 文件自动重读
 -- AI/外部程序改文件后，回到 nvim 自动刷新（本地有未保存修改时不覆盖）
 vim.api.nvim_create_autocmd({ 'FocusGained', 'BufEnter', 'CursorHold' }, {
   callback = function(args)
@@ -29,10 +40,65 @@ vim.api.nvim_create_autocmd({ 'FocusGained', 'BufEnter', 'CursorHold' }, {
   end,
 })
 
--- ── 插件：Markdown 阅读增强 ─────────────────────────────
+-- ## @documents 文档阅读
+-- ### @markdown Markdown 渲染
 -- 用 nvim 0.12 内置的 vim.pack 管理（无需 lazy/packer），首次启动自动下载
 vim.pack.add({ 'https://github.com/MeanderingProgrammer/render-markdown.nvim' })
+
+local markdown_globe = '\u{f0ac} '
+local markdown_web_extensions = {
+  avif = true, bmp = true, gif = true, heic = true, heif = true, ico = true,
+  jpeg = true, jpg = true, pdf = true, png = true, svg = true, tif = true,
+  tiff = true, webp = true,
+}
+
+-- 在插件计算渲染宽度前套用 Explorer 的文件图标，远程图片和 PDF 加地球。
+local function attach_markdown_file_icons(ctx)
+  local config = require('render-markdown.state').get(ctx.buf)
+  local set_link_text = config.set_link_text
+
+  function config:set_link_text(destination, icon)
+    local target = destination:match('^<(.*)>$') or destination
+    local original_icon = icon[1]
+    set_link_text(self, target, icon)
+
+    local path = target:match('^[^?#]+')
+    if not path then return end
+    local web_url = path:match('^[Hh][Tt][Tt][Pp][Ss]?:(//.*)$') or path
+    local host, web_path = web_url:match('^//([^/]+)(/.*)$')
+    if web_path then
+      -- GitHub 的 blob 路径打开的是文件浏览页。
+      if host:lower() == 'github.com' and web_path:match('^/[^/]+/[^/]+/blob/') then return end
+      local filename = vim.uri_decode(web_path)
+      local extension = filename:lower():match('%.(%w+)$')
+      if markdown_web_extensions[extension] then
+        local glyph, highlight = Snacks.util.icon(filename, 'file')
+        icon[1], icon[2] = markdown_globe .. vim.trim(glyph) .. ' ', highlight or icon[2]
+      end
+      return
+    end
+
+    if icon[1] ~= original_icon or path:sub(1, 2) == '//' then return end
+    if path:match('^%a[%w+.-]*:') then
+      path = path:match('^file://(/.*)$') or path:match('^file://localhost(/.*)$')
+      if not path then return end
+    end
+
+    path = vim.uri_decode((path:gsub('\\(%p)', '%1')))
+    if path:find('\0', 1, true) then return end
+    local trailing_slash = path:sub(-1) == '/'
+    if path:sub(1, 1) ~= '/' and path:sub(1, 2) ~= '~/' then
+      path = vim.fs.joinpath(vim.fs.dirname(vim.api.nvim_buf_get_name(ctx.buf)), path)
+    end
+    path = vim.fs.abspath(path)
+    local category = (trailing_slash or vim.fn.isdirectory(path) == 1) and 'directory' or 'file'
+    local glyph, highlight = Snacks.util.icon(path, category)
+    icon[1], icon[2] = vim.trim(glyph) .. ' ', highlight or icon[2]
+  end
+end
+
 require('render-markdown').setup({
+  on = { attach = attach_markdown_file_icons },
   -- HTML 块 / LaTeX 公式 / YAML front matter 的额外美化用不到，
   -- 显式关闭（正文渲染不受影响；以后想要再删掉这几行即可）
   html = { enabled = false },
@@ -70,12 +136,11 @@ require('render-markdown').setup({
   },
   -- 链接图标：内置已带 GitHub/GitLab/Google/Stack Overflow/YouTube/Reddit/Wikipedia/X/
   -- Neovim/Apple/Discord/HN/LinkedIn/Microsoft/Slack/Steam 官方图标；
-  -- 这里统一地球兑底，补国内常用站，本地路径用文件夹
+  -- 这里统一地球兜底，补国内常用站。本地路径沿用 Snacks Explorer 的图标。
   link = {
-    hyperlink = '\u{f0ac} ',  -- fa-globe 地球（非 http 链接的兑底）
+    hyperlink = markdown_globe, -- fa-globe 地球兜底
     custom = {
-      web = { icon = '\u{f0ac} ', pattern = '^http' },     -- 普通网站 → 地球
-      file = { icon = '\u{f07b} ', pattern = '^[^:]+/' },   -- 本地路径 → 文件夹
+      web = { icon = markdown_globe, pattern = '^https?://' }, -- 普通网站 → 地球
       wechat = { icon = '\u{f0611} ', pattern = 'weixin%.qq%.com', kind = 'url' },
       qq = { icon = '\u{f1d6} ', pattern = 'qq%.com', kind = 'url' },
       weibo = { icon = '\u{f18a} ', pattern = 'weibo%.com', kind = 'url' },
@@ -90,6 +155,7 @@ require('render-markdown').setup({
   },
 })
 
+-- #### @markdown-colors 代码、标题与行内高亮配色
 -- 区分代码块与行内代码的底色（默认两者同用 ColorColumn，看不出区别；
 -- 色值取自终端的 Catppuccin Mocha：块=深色面板，行内=浅色小块）
 vim.api.nvim_set_hl(0, 'RenderMarkdownCode', { bg = '#24273a' })       -- 代码块面板（macchiato base，黑底终端上可见）
@@ -116,6 +182,7 @@ for i, fg in ipairs(prefix_colors) do
   vim.api.nvim_set_hl(0, ('RenderMarkdownH%dIcon'):format(i), { fg = fg })
 end
 
+-- #### @markdown-wrap Markdown 软换行
 -- markdown 文件按单词软换行，长段落阅读不折行断词
 vim.api.nvim_create_autocmd('FileType', {
   pattern = 'markdown',
@@ -127,7 +194,7 @@ vim.api.nvim_create_autocmd('FileType', {
   end,
 })
 
--- ── 插件：图片显示（snacks.nvim，走 Kitty 图形协议）──
+-- ### @snacks Snacks 图片预览与项目树
 -- WezTerm 不支持行内占位符 → 只能悬浮窗预览：
 -- 光标停在 ![..](..) 或图片路径上按空格延迟或 \i 弹出；也可直接 nvim 打开图片文件
 vim.pack.add({ 'https://github.com/folke/snacks.nvim' })
@@ -149,10 +216,13 @@ require('snacks').setup({
     doc = { inline = false, float = true },
   },
 })
+
+-- #### @document-keys 文档阅读快捷键
 -- \i：预览光标处图片（悬浮窗，按 q 或 Esc 关闭）
 vim.keymap.set('n', '<LocalLeader>i', function() require('snacks.image').hover() end, { desc = '预览光标处图片' })
 vim.keymap.set('n', '<LocalLeader>m', '<Cmd>RenderMarkdown toggle<CR>', { desc = '切换 Markdown 渲染' })
 
+-- ### @pdf PDF 文本阅读
 -- PDF 保留两种阅读方式：直接打开时由 snacks.image 渲染页面；
 -- \t 则用 pdftotext 提取为只读文本，便于 / 搜索、y 复制。q 关闭文本并回到 PDF。
 local function open_pdf_text(path)
@@ -219,7 +289,8 @@ vim.api.nvim_create_user_command('PdfText', function(opts)
 end, { nargs = '?', complete = 'file', desc = '以可搜索的只读文本打开 PDF' })
 vim.keymap.set('n', '<LocalLeader>t', open_pdf_text, { desc = 'PDF 文本阅读模式' })
 
--- ── 插件：mini.nvim 模块化小工具（只启用用得上的模块）──
+-- ## @editing 编辑与导航
+-- ### @mini mini.nvim 模块
 vim.pack.add({ 'https://github.com/nvim-mini/mini.nvim' }) -- 已迁组织：旧 echasnovski 地址靠重定向，改新址免依赖
 require('mini.icons').setup({
   -- 文件类型图标：固定用经典 nerd font 字形（mini.icons 对 sh 的兜底字形在会话间不一致）。
@@ -252,16 +323,18 @@ require('mini.jump2d').setup({
   mappings = { start_jumping = '<Leader>j' },
 })
 
--- 快捷键提示：按下 Space 等前缀键后，显示当前实际生效的后续键与中文说明
+-- ### @which-key 快捷键提示
+-- 按下 Space 等前缀键后，显示当前实际生效的后续键与中文说明
 vim.pack.add({ 'https://github.com/folke/which-key.nvim' })
 require('which-key').setup({
   preset = 'classic',
   delay = 300,
   spec = {
-    { '<Leader>h', group = 'Git 改动' },
+    { '<Leader>h', group = 'Git' },
   },
 })
 
+-- ### @navigation 文件、缓冲区与全文搜索快捷键
 vim.keymap.set('n', '<Leader>e', function() Snacks.explorer() end, { desc = '左侧项目树' })
 vim.keymap.set('n', '<Leader>E', function()
   local path = vim.api.nvim_buf_get_name(0) -- 定位到当前文件所在目录
@@ -271,7 +344,62 @@ vim.keymap.set('n', '<Leader>f', function() MiniPick.builtin.files() end, { desc
 vim.keymap.set('n', '<Leader>b', function() MiniPick.builtin.buffers() end, { desc = '切换缓冲区' })
 vim.keymap.set('n', '<Leader>g', function() MiniPick.builtin.grep_live() end, { desc = '实时全文搜索' })
 
--- ── Git：gitsigns.nvim（社区主流的行级改动显示 / 预览）──
+-- ## @git Git 仓库操作与改动预览
+-- ### @neogit Neogit 状态页、区段配色与折叠图标
+vim.pack.add({ 'https://github.com/NeogitOrg/neogit' })
+vim.api.nvim_set_hl(0, 'NeogitUntrackedfiles', { fg = '#94e2d5', bold = true })
+vim.api.nvim_set_hl(0, 'NeogitUnstagedchanges', { fg = '#f9e2af', bold = true })
+vim.api.nvim_set_hl(0, 'NeogitStagedchanges', { fg = '#a6e3a1', bold = true })
+require('neogit').setup({
+  signs = {
+    section = { '▸', '▾' },
+    item = { '›', '⌄' },
+  },
+})
+
+-- #### @neogit-indent 状态页显示缩进
+-- 用折叠层级做显示缩进，保留 Neogit 用来定位 diff 的原始文本。
+local neogit_indent = vim.api.nvim_create_namespace('NeogitStatusIndent')
+vim.api.nvim_create_autocmd('FileType', {
+  group = vim.api.nvim_create_augroup('NeogitStatusIndent', { clear = true }),
+  pattern = 'NeogitStatus',
+  callback = function(args)
+    local buf = args.buf
+    local pending = false
+    local function refresh_indent()
+      if pending then return end
+      pending = true
+      -- 等 Neogit 写完文本和折叠后再计算层级。
+      vim.schedule(function()
+        pending = false
+        if not vim.api.nvim_buf_is_loaded(buf) then return end
+        local win = vim.fn.win_findbuf(buf)[1]
+        if not win then return end
+
+        vim.api.nvim_win_call(win, function()
+          vim.api.nvim_buf_clear_namespace(buf, neogit_indent, 0, -1)
+          for line = 1, vim.api.nvim_buf_line_count(buf) do
+            local depth = vim.fn.foldlevel(line) - 1
+            if depth > 0 then
+              vim.api.nvim_buf_set_extmark(buf, neogit_indent, line - 1, 0, {
+                virt_text = { { ('  '):rep(depth) } },
+                virt_text_pos = 'inline',
+              })
+            end
+          end
+        end)
+      end)
+    end
+
+    vim.api.nvim_buf_attach(buf, false, { on_lines = refresh_indent })
+    refresh_indent()
+  end,
+})
+
+-- #### @neogit-keymap 状态页快捷键
+vim.keymap.set('n', '<Leader>hs', '<Cmd>Neogit<CR>', { desc = '打开 Git 仓库状态' })
+
+-- ### @gitsigns Gitsigns 行级改动与快捷键
 vim.pack.add({ 'https://github.com/lewis6991/gitsigns.nvim' })
 local gitsigns = require('gitsigns')
 gitsigns.setup({
@@ -319,6 +447,7 @@ gitsigns.setup({
   end,
 })
 
+-- #### @gitsigns-colors 工作区与暂存区配色
 -- Catppuccin Mocha：符号用清晰的绿 / 蓝 / 红，整行背景只轻微着色
 vim.api.nvim_set_hl(0, 'GitSignsAdd', { fg = '#a6e3a1', bold = true })
 vim.api.nvim_set_hl(0, 'GitSignsChange', { fg = '#89b4fa', bold = true })
@@ -336,7 +465,8 @@ vim.api.nvim_set_hl(0, 'GitSignsStagedAddLn', { bg = '#222b26' })
 vim.api.nvim_set_hl(0, 'GitSignsStagedChangeLn', { bg = '#222632' })
 vim.api.nvim_set_hl(0, 'GitSignsStagedDeleteLn', { bg = '#30242a' })
 
--- ── 状态栏：lualine.nvim（模式 / Git / 诊断 / 文件 / 位置）──
+-- ## @statusline 状态栏
+-- ### @lualine-theme lualine 插件与主题
 vim.pack.add({ 'https://github.com/nvim-lualine/lualine.nvim' })
 local mocha = {
   base = '#1e1e2e', mantle = '#181825', surface0 = '#313244', surface1 = '#45475a',
@@ -360,6 +490,7 @@ local lualine_theme = {
   },
 }
 
+-- ### @lualine-layout 当前目录与状态栏布局
 local function current_directory()
   local path = vim.fn.fnamemodify(vim.fn.getcwd(), ':~')
   if #path > 32 then path = vim.fn.pathshorten(path) end
@@ -397,7 +528,8 @@ require('lualine').setup({
   },
 })
 
--- ── 插件：nvim-treesitter（常见文本 / 配置 / 代码格式）──
+-- ## @languages 语言支持
+-- ### @treesitter Treesitter 解析器
 -- 0.11+ 高亮/折叠由 nvim 内置引擎接管，旧式 setup({highlight=...}) 已废弃
 vim.pack.add({ 'https://github.com/nvim-treesitter/nvim-treesitter' })
 -- Neovim 自带 c/lua/markdown/query/vim/vimdoc；其余 parser 声明式安装：
@@ -413,6 +545,7 @@ require('nvim-treesitter').install({
   'html', 'css', 'javascript', 'typescript', 'tsx', 'sql', 'xml', 'csv', 'tsv',
 })
 
+-- #### @treesitter-display Treesitter 高亮与折叠
 -- 任意普通文件只要已有对应 parser，就自动启用 Treesitter 高亮和折叠；
 -- 没有 parser 的格式静默回退到 Neovim 自带的传统语法高亮。
 vim.api.nvim_create_autocmd('FileType', {
@@ -427,7 +560,7 @@ vim.api.nvim_create_autocmd('FileType', {
   end,
 })
 
--- ── Python：使用 0.12 内置 LSP 客户端连接 Pyright ─────────────
+-- ### @pyright Python LSP（Pyright）
 -- 优先使用 PATH 中的命令；桌面启动时 PATH 较短，则复用 Emacs 已安装的
 -- Pyright。这样两款编辑器的 Python 对比使用同一个语言服务器。
 local pyright = vim.fn.exepath('pyright-langserver')
