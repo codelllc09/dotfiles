@@ -41,3 +41,34 @@ run = 'piper -- python3 /home/lcw/.config/yazi/scripts/sqlite-preview.py "$1"'
 
 # epub（preview-epub.yazi）与 cbz/cbr（preview-cbz.yazi）的规则
 # 由 init.lua 里的 :setup() 自动注册，无需在此声明
+
+[opener]
+# 26.x 占位符为 %s 系列（%s=全部选中，%sN=第 N 个）；旧的 $@/$1 已废弃
+# 视频播放：优先 mpv，备选 Flatpak 版 VLC
+play-video = [
+	{ run = 'mpv --force-window %s', orphan = true, desc = "mpv", for = "unix" },
+	{ run = 'flatpak run org.videolan.VLC %s', orphan = true, desc = "VLC (flatpak)", for = "unix" },
+]
+# 修图（GIMP）
+edit-img = [
+	{ run = 'gimp %s', orphan = true, desc = "GIMP", for = "unix" },
+]
+# 快速翻图（swayimg，vim 键位）
+view-img = [
+	{ run = 'swayimg %s', orphan = true, desc = "swayimg", for = "unix" },
+]
+
+[[open.prepend_rules]]
+# 仅覆盖视频，音频沿用系统默认应用。
+mime = "video/*"
+use  = ["play-video", "reveal"]
+
+[[open.prepend_rules]]
+# 图片：默认/Enter 仍走 xdg-open（= GNOME Loupe 看图器），按 O 可选 GIMP 修图
+mime = "image/*"
+use  = ["open", "view-img", "edit-img", "reveal"]
+
+[[open.prepend_rules]]
+# HTML：默认用浏览器打开，按 O 可选编辑源码
+url = "*.{html,htm}"
+use = ["open", "edit", "reveal"]

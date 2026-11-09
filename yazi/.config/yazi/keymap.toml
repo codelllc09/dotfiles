@@ -28,3 +28,15 @@ desc = "Zoom out hovered file"
 on   = [ "g", "o" ]
 run  = 'shell "xdg-open ." --confirm'
 desc = "Open current dir in file explorer"
+
+# <C-o>: 确认后用 mimeopen 选择应用打开光标下的文件（%h）
+[[mgr.prepend_keymap]]
+on   = "<C-o>"
+run  = 'shell "mimeopen --ask %h" --block'
+desc = "Open with (app picker)"
+
+# X: 手输任意命令打开选中文件（open-with-cmd.yazi，已安装）
+[[mgr.prepend_keymap]]
+on   = "X"
+run  = "plugin open-with-cmd"
+desc = "Open with typed command"

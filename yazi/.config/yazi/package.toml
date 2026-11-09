@@ -38,5 +38,10 @@ use = "AminurAlam/yazi-plugins:preview-cbz"
 rev = "50d82a7"
 hash = "9d51c156d0207ec4bb00a92b31fa54ba"
 
+[[plugin.deps]]
+use = "Ape/open-with-cmd"
+rev = "56705e2"
+hash = "7c84fff414a652c86c44523dbb08026f"
+
 [flavor]
 deps = []
