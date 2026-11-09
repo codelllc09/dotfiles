@@ -42,19 +42,23 @@ case "$base" in
 esac
 
 printf '\033]2;compose - pane %s\007' "$pane"
-tmp=$(mktemp /dev/shm/compose-XXXXXX.txt) # tmpfs:全程內存,零磁盤 I/O
-"${ed_cmd[@]}" ${extra:+"${extra[@]}"} "$tmp"
+tmp=$(mktemp /dev/shm/compose-XXXXXX.txt) || exit 1
+trap 'rm -f -- "$tmp"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+"${ed_cmd[@]}" ${extra:+"${extra[@]}"} "$tmp" || exit "$?"
+content=$(cat -- "$tmp") || exit "$?"
 if [ ! -s "$tmp" ]; then # 空文件(含 :q! 放棄):靜默關窗
-  rm -f "$tmp"
   exit 0
 fi
 ok=1
 # 括號粘貼:整段(含內部換行)進 pi 輸入框,不觸發提交
-wezterm cli send-text --pane-id "$pane" -- "$(cat "$tmp")" || ok=0
+wezterm cli send-text --pane-id "$pane" -- "$content" || ok=0
 # 自動提交模式才補回車
 if [ "$ok" = 1 ] && [ "$AUTO_SUBMIT" = 1 ]; then
   wezterm cli send-text --pane-id "$pane" --no-paste -- $'\r' || ok=0
 fi
-rm -f "$tmp"
 [ "$ok" = 0 ] && { echo "inject failed: pane $pane may be closed" >&2; sleep 2; exit 1; }
 # 成功路徑靜默退出：窗口即關，提示看不見，故不輸出
+exit 0
