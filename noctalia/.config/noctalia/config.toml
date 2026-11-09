@@ -4,6 +4,7 @@ setup_wizard_enabled = false
 clipboard_enabled = true
 polkit_agent = true
 offline_mode = true
+launch_apps_as_systemd_services = true
 
 [theme]
 sync_color_scheme = false

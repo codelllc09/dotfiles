@@ -1,0 +1,18 @@
+[Unit]
+Description=Fcitx 5 input method for Niri
+Requisite=niri.service
+PartOf=niri.service
+After=niri.service
+Before=graphical-session.target xdg-desktop-autostart.target
+ConditionEnvironment=XDG_CURRENT_DESKTOP=niri
+
+[Service]
+Type=dbus
+BusName=org.fcitx.Fcitx5
+ExecStart=/usr/bin/fcitx5 -D
+Restart=on-failure
+RestartSec=2s
+TimeoutStartSec=10s
+
+[Install]
+WantedBy=niri.service

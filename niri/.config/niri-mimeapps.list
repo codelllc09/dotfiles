@@ -1,0 +1,4 @@
+[Default Applications]
+application/pdf=org.gnome.Papers.desktop;
+image/png=org.gnome.Loupe.desktop;
+image/jpeg=org.gnome.Loupe.desktop;

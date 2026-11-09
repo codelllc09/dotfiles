@@ -42,9 +42,12 @@
 
 `niri` 管理 `config.kdl`，`noctalia` 管理頂欄、`panel-status` 插件與屏保腳本。
 部署可用 `stow niri noctalia`（在倉庫根目錄執行），或沿用 `install.sh`。
+部署後執行 `systemctl --user enable noctalia.service fcitx5-niri.service`。
+Fcitx 5 的自啟與 D-Bus 按需啟動皆限於 Niri。
+Niri 預設以 Papers 開 PDF、以 Loupe 開 PNG 和 JPEG。`Super+Shift+Y` 匯入剪貼簿圖片進行標註。
 Noctalia GUI 的調整存於 `~/.local/state/noctalia/settings.toml`，同名設定以該檔為準。
 
-新機需安裝 Niri、Noctalia、Fcitx 5 Rime 與 mpv。屏保素材放在 `~/Videos/screensaver.mp4`。
+新機需安裝 Niri、Noctalia、Fcitx 5 Rime、mpv 與 wl-clipboard。屏保素材放在 `~/Videos/screensaver.mp4`。
 中英文指示需用 C 編譯器、pkg-config 和 GLib 開發檔（Fedora 的 `gcc`、`pkgconf-pkg-config`、`glib2-devel`）重建：
 
 ```bash

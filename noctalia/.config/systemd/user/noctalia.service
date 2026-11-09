@@ -1,0 +1,16 @@
+[Unit]
+Description=Noctalia desktop shell for Niri
+BindsTo=niri.service
+After=niri.service
+StartLimitIntervalSec=30s
+StartLimitBurst=5
+
+[Service]
+Type=exec
+Slice=session.slice
+ExecStart=/usr/bin/noctalia
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=niri.service

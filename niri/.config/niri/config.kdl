@@ -267,9 +267,6 @@ layout {
 // which may be more convenient to use.
 // See the binds section below for more spawn examples.
 
-// This line starts waybar, a commonly used bar for Wayland compositors.
-spawn-at-startup "/usr/bin/noctalia"
-
 // To run a shell command (with variables, pipes, etc.), use spawn-sh-at-startup:
 // spawn-sh-at-startup "qs -c ~/source/qs/MyAwesomeShell"
 
@@ -632,6 +629,7 @@ binds {
     Ctrl+Print { screenshot-screen; }
     Alt+Print { screenshot-window; }
     Mod+Y hotkey-overlay-title="Noctalia Clipboard History" { spawn "/usr/bin/noctalia" "msg" "panel-toggle" "clipboard"; }
+    Mod+Shift+Y repeat=false hotkey-overlay-title="標註剪貼簿圖片" { spawn-sh r#"exec "$HOME/.local/bin/noctalia-annotate-clipboard""#; }
     Mod+N hotkey-overlay-title="Noctalia Notifications" { spawn "/usr/bin/noctalia" "msg" "panel-toggle" "control-center" "notifications"; }
 
     // Applications such as remote-desktop clients and software KVM switches may

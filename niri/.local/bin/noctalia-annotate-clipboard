@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+image=$(mktemp "${XDG_RUNTIME_DIR:?}/noctalia-clipboard.XXXXXX")
+trap 'rm -f -- "$image"' EXIT
+
+if ! /usr/bin/timeout 5s /usr/bin/wl-paste --no-newline --type image > "$image" 2>/dev/null ||
+    [ ! -s "$image" ]; then
+    /usr/bin/notify-send --app-name=Noctalia '剪貼簿裡沒有可讀取的圖片'
+    exit 1
+fi
+
+if ! /usr/bin/noctalia msg annotate "$image"; then
+    /usr/bin/notify-send --app-name=Noctalia '無法開啟剪貼簿圖片'
+    exit 1
+fi
