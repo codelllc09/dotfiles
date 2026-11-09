@@ -125,7 +125,21 @@ end)
 
 -- ── 输入法自动愈合 ──
 -- 实测环境：Fedora 44 / gnome-shell+mutter 50.0→50.4 / ibus 1.5.34-rc1→1.5.34 / wezterm 20260901 nightly
--- 解锁竞态会把 rime 覆盖成 xkb；检出 mru-sources 首位为 rime 而引擎不是时自动恢复
+-- 【根因已查实 2026-11-03，dbus 抓包实证，pi/插件无责】旧注释“解锁竞态把 rime 覆盖成 xkb”
+-- 只是症状的一个触发面。完整链条（每步均有 ibus 私有总线上 dbus-monitor 序列佐证）：
+--   ① 密码框/锁屏焦点后，gnome-shell inputMethod._purpose/_hints 泄漏为 PASSWORD+HIDDEN_TEXT
+--      （js/misc/inputMethod.js 在失焦时不重置；wezterm 从不 set_content_type 无从纠正）
+--   ② 泄漏窗口期内，wezterm 的 text-input disable→enable 循环（Alt 修饰键、窗口焦点变化
+--      均触发；与 kitty protocol 无关，未 push 的 pane 同样触发）令 gnome-shell 重新上报
+--      ContentType(PASSWORD) → keyboard.js _ibusSetContentType → _disableIBus=true →
+--      reload() 仅剩 xkb 源 → SetGlobalEngine("xkb:us::eng")，rime 引擎被 Destroy
+--   ③ 本挂载（window-focus-changed）只救得回焦点变化场景；Alt+Q/Alt+F 等纯按键无焦点
+--      事件，只能等用户切窗口——这就是“alt+Q 引用后切不出中文”的全貌
+-- 【常驻解】~/.local/bin/ibus-rime-guard（systemd user service，同判据 + 500ms mru 仲裁，
+-- 250ms 轮询，已实测：注入泄漏 750ms 内恢复、mru 指向非 rime 时不与用户对抗）。
+-- 本 ime_heal 保留作焦点场景快路径（比 guard 快约 100ms），两者幂等不冲突。
+-- 复盘材料：/tmp/wezterm-ime-heal.log（本函数历史）、/tmp/ibus-dbus.log 与
+-- /tmp/ibus-engine-watch.log（2026-11-03 定位会话抓包，保留至上游 issue 提交后可删）
 local function ime_heal()
   local now = os.time()
   if now - (wezterm.GLOBAL.ime_heal_at or 0) < 3 then return end -- 节流：3 秒内至多检一次

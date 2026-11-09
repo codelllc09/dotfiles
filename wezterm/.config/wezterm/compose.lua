@@ -22,6 +22,19 @@ M.auto_submit = false
 
 local COMPOSER = wezterm.config_dir .. '/composer.sh'
 
+local function destination(window, pane, pane_id)
+  local tab = 'TAB?'
+  for _, info in ipairs(window:mux_window():tabs_with_info()) do
+    if info.is_active then
+      tab = 'TAB' .. tostring(info.index + 1)
+      break
+    end
+  end
+  local title = pane:get_title():gsub('^%s+', ''):gsub('%s+$', '')
+  local label = ('%s / %s / #%s %s'):format(window:active_workspace(), tab, pane_id, title)
+  return label:gsub('%c', ' '):gsub('%s+$', '')
+end
+
 M.keys = {
   {
     key = 'I', mods = 'CTRL|SHIFT', -- 可按喜好改鍵
@@ -32,10 +45,13 @@ M.keys = {
       local now = os.time()
       if now - (wezterm.GLOBAL.compose_at or 0) < 1 then return end
       wezterm.GLOBAL.compose_at = now
+      local pane_id = tostring(pane:pane_id())
+      local ok, label = pcall(destination, window, pane, pane_id)
       window:perform_action(wezterm.action.SpawnCommandInNewWindow {
-        args = { 'bash', COMPOSER, tostring(pane:pane_id()) },
+        args = { 'bash', COMPOSER, pane_id },
         set_environment_variables = {
           COMPOSE_AUTO_SUBMIT = M.auto_submit and '1' or '0',
+          COMPOSE_DESTINATION = ok and label or ('窗格 #' .. pane_id),
         },
       }, pane)
     end),

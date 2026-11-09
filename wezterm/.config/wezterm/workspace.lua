@@ -76,21 +76,32 @@ local function current_workspace(window)
   return select(2, pcall(function() return window:active_workspace() end))
 end
 
-local function render(window)
+local function render(window, pane)
   if flash_msg and os.time() > flash_until then flash_msg = nil end -- 零定時器：過期自清
   local ok, err = pcall(function()
-    local names = ordered_names()
-    local cur = current_workspace(window) or 'default'
-    local idx = '?'
-    for i, n in ipairs(names) do
-      if n == cur then idx = i break end
+    local target = pane and pane:get_user_vars().compose_destination
+    local els
+    if target and target ~= '' then
+      -- 預留標籤和新分頁按鈕的空間，長標題從右端截短。
+      local width = math.max(0, pane:get_dimensions().cols - 28)
+      els = {
+        { Foreground = { Color = C.accent } },
+        { Text = wezterm.truncate_right('→ ' .. target:gsub('%c', ' '), width) },
+      }
+    else
+      local names = ordered_names()
+      local cur = current_workspace(window) or 'default'
+      local idx = '?'
+      for i, n in ipairs(names) do
+        if n == cur then idx = i break end
+      end
+      els = {
+        { Foreground = { Color = C.dim } }, { Text = 'WS ' },
+        { Foreground = { Color = C.text } }, { Text = tostring(idx) .. '/' .. tostring(#names) },
+        { Foreground = { Color = C.dim } }, { Text = ': ' },
+        { Foreground = { Color = C.accent } }, { Text = cur },
+      }
     end
-    local els = {
-      { Foreground = { Color = C.dim } }, { Text = 'WS ' },
-      { Foreground = { Color = C.text } }, { Text = tostring(idx) .. '/' .. tostring(#names) },
-      { Foreground = { Color = C.dim } }, { Text = ': ' },
-      { Foreground = { Color = C.accent } }, { Text = cur },
-    }
     -- 複製/搜索模式徽章（2026-09-08）：主配置 format-tab-title 完全接管了標題渲染，
     -- 默認 "Copy Mode" 前綴不顯示——右欄黃色徽章補回模式指示。僅徽章、
     -- 不加其他提示文案。active_key_table() 隨 status_update_interval(250ms)
@@ -241,7 +252,7 @@ local function open_drawer(window, pane)
     dbg('split err: ' .. tostring(p2))
     flash('drawer spawn failed (see ws-debug)')
   end
-  render(window)
+  render(window, pane)
 end
 
 M.keys = {
@@ -251,7 +262,7 @@ M.keys = {
 -- update-right-status：渲染 + 结果消费（rime 同款：标题推送/任意活动必发本事件；
 -- 零状态 → 重载杀不死任何东西）
 wezterm.on('update-right-status', function(window, pane)
-  render(window)
+  render(window, pane)
   if consume_pending(window, pane) then
     wezterm.GLOBAL.ws_alive = nil
   end
@@ -260,7 +271,7 @@ end)
 
 -- 焦点回迁（抽屉关闭后必发）：第三消费入口
 wezterm.on('window-focus-changed', function(window, pane)
-  render(window)
+  render(window, pane)
   if consume_pending(window, pane) then
     wezterm.GLOBAL.ws_alive = nil
   end
