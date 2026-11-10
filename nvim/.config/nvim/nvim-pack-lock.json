@@ -1,5 +1,10 @@
 {
   "plugins": {
+    "avante.nvim": {
+      "rev": "6b0c359ff11ecb464a877273851888b3c5e99d57",
+      "src": "https://github.com/avante-corp/avante.nvim",
+      "version": "'v0.5.0'"
+    },
     "gitsigns.nvim": {
       "rev": "1e9d0fbfe7ff848bc402d2c2e2854fb4eff2dce7",
       "src": "https://github.com/lewis6991/gitsigns.nvim"
@@ -7,6 +12,14 @@
     "lualine.nvim": {
       "rev": "221ce6b2d999187044529f49da6554a92f740a96",
       "src": "https://github.com/nvim-lualine/lualine.nvim"
+    },
+    "mega.cmdparse": {
+      "rev": "47ea5b1b23059fbb79a8e262002f32e7cd8aed90",
+      "src": "https://github.com/ColinKennedy/mega.cmdparse"
+    },
+    "mega.logging": {
+      "rev": "194ad8c300186e73c3eb1ebeb3ede42eb219be3b",
+      "src": "https://github.com/ColinKennedy/mega.logging"
     },
     "mini.nvim": {
       "rev": "d79805a0dfe9e8dc82c0988aec0d85e5440e86eb",
@@ -16,9 +29,17 @@
       "rev": "ba2f33b64b996ff5530c4c45a3c432fb63aaa95b",
       "src": "https://github.com/NeogitOrg/neogit"
     },
+    "nui.nvim": {
+      "rev": "10fc361835c856ba4233ef5ea135b919bf3dce97",
+      "src": "https://github.com/MunifTanjim/nui.nvim"
+    },
     "nvim-treesitter": {
       "rev": "a2f694478be07f89c2d03cc17858a8745a400c4b",
       "src": "https://github.com/nvim-treesitter/nvim-treesitter"
+    },
+    "plenary.nvim": {
+      "rev": "74b06c6c75e4eeb3108ec01852001636d85a932b",
+      "src": "https://github.com/nvim-lua/plenary.nvim"
     },
     "render-markdown.nvim": {
       "rev": "8e8795368391036643b622875a6da6a51bcd33f4",

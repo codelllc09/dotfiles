@@ -4,6 +4,7 @@
 --   documents   Markdown、Snacks、PDF 文本阅读
 --   editing     mini.nvim、快捷键提示、文件和文本导航
 --   git         Neogit、状态页缩进、Gitsigns
+--   avante      Codex ACP 对话
 --   statusline  lualine 主题与布局
 --   languages   Treesitter、Python LSP
 
@@ -114,6 +115,24 @@ do
   })
 end
 
+-- ### @avante-runtime 首次安装或更新时下载匹配的预编译库
+-- 锁文件中的插件可能在第一次 vim.pack.add() 时安装，提前注册下载钩子。
+local avante_version = 'v0.5.0'
+vim.api.nvim_create_autocmd('PackChanged', {
+  group = vim.api.nvim_create_augroup('AvanteRuntime', { clear = true }),
+  callback = function(ev)
+    if ev.data.spec.name ~= 'avante.nvim' then return end
+    if ev.data.kind ~= 'install' and ev.data.kind ~= 'update' then return end
+    vim.system({ 'bash', vim.fs.joinpath(ev.data.path, 'build.sh'), avante_version }, {
+      timeout = 60000,
+    }, vim.schedule_wrap(function(result)
+      if result.code == 0 then return end
+      vim.notify('Avante 预编译库下载失败，可用 :AvanteBuild 重试。\n'
+        .. vim.trim(result.stderr or ''), vim.log.levels.WARN)
+    end))
+  end,
+})
+
 -- ## @documents 文档阅读
 -- ### @draft 只对 draft 命令打开的文件自动保存
 vim.api.nvim_create_autocmd('User', {
@@ -204,6 +223,7 @@ local function attach_markdown_file_icons(ctx)
 end
 
 require('render-markdown').setup({
+  file_types = { 'markdown', 'Avante' },
   on = { attach = attach_markdown_file_icons },
   -- HTML 块 / LaTeX 公式 / YAML front matter 的额外美化用不到，
   -- 显式关闭（正文渲染不受影响；以后想要再删掉这几行即可）
@@ -436,6 +456,7 @@ require('which-key').setup({
   preset = 'classic',
   delay = 300,
   spec = {
+    { '<Leader>a', group = 'Avante' },
     { '<Leader>h', group = 'Git' },
   },
 })
@@ -570,6 +591,25 @@ vim.api.nvim_set_hl(0, 'GitSignsStagedDelete', { fg = '#a05d72', bold = true })
 vim.api.nvim_set_hl(0, 'GitSignsStagedAddLn', { bg = '#222b26' })
 vim.api.nvim_set_hl(0, 'GitSignsStagedChangeLn', { bg = '#222632' })
 vim.api.nvim_set_hl(0, 'GitSignsStagedDeleteLn', { bg = '#30242a' })
+
+-- ## @avante Codex ACP 对话
+vim.pack.add({
+  'https://github.com/nvim-lua/plenary.nvim',
+  'https://github.com/MunifTanjim/nui.nvim',
+  'https://github.com/ColinKennedy/mega.logging',
+  'https://github.com/ColinKennedy/mega.cmdparse',
+  { src = 'https://github.com/avante-corp/avante.nvim', version = avante_version },
+})
+require('avante').setup({
+  provider = 'codex', -- 内置 ACP provider，从 PATH 启动 codex-acp
+  acp_providers = {
+    codex = {
+      -- 优先复用已安装的 Codex CLI，避免 ACP 内置版本不支持当前模型。
+      env = { CODEX_PATH = vim.env.CODEX_PATH or vim.fn.exepath('codex') },
+    },
+  },
+  behaviour = { auto_approve_tool_permissions = false },
+})
 
 -- ## @statusline 状态栏
 -- ### @lualine-theme lualine 插件与主题
