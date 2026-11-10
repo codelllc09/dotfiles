@@ -1,6 +1,6 @@
 -- Neovim 配置索引
 -- 搜索 @ 加章节或小节名可直达对应标题。
---   core        基础选项、文件自动重读
+--   core        基础选项、文件自动重读、输入法
 --   documents   Markdown、Snacks、PDF 文本阅读
 --   editing     mini.nvim、快捷键提示、文件和文本导航
 --   git         Neogit、状态页缩进、Gitsigns
@@ -39,6 +39,80 @@ vim.api.nvim_create_autocmd({ 'FocusGained', 'BufEnter', 'CursorHold' }, {
     end
   end,
 })
+
+-- ### @input-method Fcitx5 / IBus 输入法
+-- 非插入模式切回英文，插入模式由用户手动切换。
+do
+  local backends = {
+    fcitx5 = {
+      check = { 'fcitx5-remote', '--check' },
+      english = { 'fcitx5-remote', '--check', '-c' },
+    },
+    ibus = {
+      check = { 'ibus', 'engine' },
+      english = { 'ibus', 'engine', 'xkb:us::eng' },
+    },
+  }
+
+  -- 优先探测桌面会话声明的输入法，未声明时先探测 Fcitx5。
+  local preferred = 'fcitx5'
+  for _, hint in ipairs({
+    (vim.env.XMODIFIERS or ''):match('@im=([^%s]+)') or '',
+    vim.env.GTK_IM_MODULE or '',
+    vim.env.QT_IM_MODULE or '',
+  }) do
+    if hint == 'fcitx' then hint = 'fcitx5' end
+    if backends[hint] then
+      preferred = hint
+      break
+    end
+  end
+  local fallback = preferred == 'fcitx5' and 'ibus' or 'fcitx5'
+  local candidates = { backends[preferred], backends[fallback] }
+  local english, detecting
+  local focused = true
+
+  local function switch_to_english()
+    if focused and #vim.api.nvim_list_uis() > 0 and vim.api.nvim_get_mode().mode:sub(1, 1) ~= 'i' then
+      vim.system(english, { timeout = 500 })
+    end
+  end
+
+  local function detect(index)
+    local backend = candidates[index]
+    if not backend then
+      detecting = false
+      return
+    end
+    if vim.fn.executable(backend.check[1]) ~= 1 then return detect(index + 1) end
+    vim.system(backend.check, { timeout = 500 }, vim.schedule_wrap(function(result)
+      if result.code ~= 0 then return detect(index + 1) end
+      english = backend.english
+      detecting = false
+      switch_to_english()
+    end))
+  end
+
+  vim.api.nvim_create_autocmd({ 'UIEnter', 'FocusGained', 'FocusLost', 'ModeChanged' }, {
+    group = vim.api.nvim_create_augroup('InputMethodEnglish', { clear = true }),
+    callback = function(ev)
+      if ev.event == 'FocusLost' then
+        focused = false
+        return
+      end
+      if ev.event ~= 'ModeChanged' then focused = true end
+      local mode = vim.api.nvim_get_mode().mode:sub(1, 1)
+      if not focused or mode == 'i' or #vim.api.nvim_list_uis() == 0 then return end
+      if ev.event == 'ModeChanged' and vim.v.event.old_mode:sub(1, 1) == mode then return end
+      if english then
+        switch_to_english()
+      elseif not detecting and (detecting == nil or ev.event ~= 'ModeChanged') then
+        detecting = true
+        detect(1)
+      end
+    end,
+  })
+end
 
 -- ## @documents 文档阅读
 -- ### @draft 只对 draft 命令打开的文件自动保存
