@@ -41,6 +41,38 @@ vim.api.nvim_create_autocmd({ 'FocusGained', 'BufEnter', 'CursorHold' }, {
 })
 
 -- ## @documents 文档阅读
+-- ### @draft 只对 draft 命令打开的文件自动保存
+vim.api.nvim_create_autocmd('User', {
+  pattern = 'DraftAutosave',
+  once = true,
+  callback = function()
+    local buf = vim.api.nvim_get_current_buf()
+    local keys = 0
+    local function save()
+      keys = 0
+      if vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].modified then
+        vim.api.nvim_buf_call(buf, function() vim.cmd('silent update') end)
+      end
+    end
+
+    -- 与交换文件一样，使用 updatetime 和 updatecount 的保存间隔。
+    vim.api.nvim_create_autocmd({ 'CursorHold', 'CursorHoldI' }, { buffer = buf, callback = save })
+    vim.api.nvim_create_autocmd('BufWritePost', { buffer = buf, callback = function() keys = 0 end })
+    local listener = vim.on_key(function(_, typed)
+      if typed == '' or vim.api.nvim_get_current_buf() ~= buf or vim.o.updatecount == 0 then return end
+      keys = keys + 1
+      if keys < vim.o.updatecount then return end
+      keys = 0
+      vim.schedule(save)
+    end)
+    vim.api.nvim_create_autocmd('BufWipeout', {
+      buffer = buf,
+      once = true,
+      callback = function() vim.on_key(nil, listener) end,
+    })
+  end,
+})
+
 -- ### @markdown Markdown 渲染
 -- 用 nvim 0.12 内置的 vim.pack 管理（无需 lazy/packer），首次启动自动下载
 vim.pack.add({ 'https://github.com/MeanderingProgrammer/render-markdown.nvim' })
