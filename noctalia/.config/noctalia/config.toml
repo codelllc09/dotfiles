@@ -10,7 +10,7 @@ launch_apps_as_systemd_services = true
 sync_color_scheme = false
 
 [wallpaper]
-enabled = false
+enabled = true
 
 [weather]
 enabled = false
