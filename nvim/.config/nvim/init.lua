@@ -324,7 +324,25 @@ vim.api.nvim_create_autocmd('FileType', {
 -- WezTerm 不支持行内占位符 → 只能悬浮窗预览：
 -- 光标停在 ![..](..) 或图片路径上按空格延迟或 \i 弹出；也可直接 nvim 打开图片文件
 vim.pack.add({ 'https://github.com/folke/snacks.nvim' })
-require('snacks').setup({
+local snacks = require('snacks')
+-- 在 Explorer 重绘时覆盖光标行的文件名颜色，避免 Git 状态的灰字融进底色。
+local explorer_cursorline = vim.api.nvim_create_namespace('SnacksExplorerCursorLine')
+snacks.util.set_hl({ SnacksExplorerCursorLine = { fg = '#cdd6f4', bg = '#304668' } })
+vim.api.nvim_set_decoration_provider(explorer_cursorline, {
+  on_win = function(_, win, buf)
+    if not vim.b[buf].snacks_explorer or not vim.wo[win].cursorline then return false end
+    local row = vim.api.nvim_win_get_cursor(win)[1] - 1
+    vim.api.nvim_buf_set_extmark(buf, explorer_cursorline, row, 0, {
+      end_row = row + 1,
+      end_col = 0,
+      hl_group = 'SnacksExplorerCursorLine',
+      hl_eol = true,
+      priority = 5000, -- 高于 Snacks 文件名高亮（4096）
+      ephemeral = true,
+    })
+  end,
+})
+snacks.setup({
   -- 超大文件 / 超长行自动关闭 Treesitter、LSP 等重型功能，避免查看日志或压缩 JSON 时卡顿
   bigfile = { enabled = true },
   -- 左侧项目树：以 nvim 当前工作目录为根，打开文件后继续保持并自动跟随
@@ -335,6 +353,12 @@ require('snacks').setup({
         follow_file = true,
         auto_close = false,
         layout = { preset = 'sidebar', preview = false },
+        win = {
+          list = {
+            b = { snacks_explorer = true },
+            wo = { cursorlineopt = 'number' }, -- 整行底色由上面的高亮绘制
+          },
+        },
       },
     },
   },
