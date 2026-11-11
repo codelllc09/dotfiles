@@ -325,19 +325,23 @@ vim.api.nvim_create_autocmd('FileType', {
 -- 光标停在 ![..](..) 或图片路径上按空格延迟或 \i 弹出；也可直接 nvim 打开图片文件
 vim.pack.add({ 'https://github.com/folke/snacks.nvim' })
 local snacks = require('snacks')
--- 在 Explorer 重绘时覆盖光标行的文件名颜色，避免 Git 状态的灰字融进底色。
 local explorer_cursorline = vim.api.nvim_create_namespace('SnacksExplorerCursorLine')
-snacks.util.set_hl({ SnacksExplorerCursorLine = { fg = '#cdd6f4', bg = '#304668' } })
+snacks.util.set_hl({
+  SnacksExplorerCursorLine = { bg = '#304668' },
+  SnacksExplorerDimmed = { fg = '#bac2de' },
+})
 vim.api.nvim_set_decoration_provider(explorer_cursorline, {
   on_win = function(_, win, buf)
     if not vim.b[buf].snacks_explorer or not vim.wo[win].cursorline then return false end
+    -- 沿用 Snacks 对焦点的判断，搜索框获得焦点时也保留蓝底。
+    local focused = vim.wo[win].winhighlight:find('CursorLine:SnacksPickerListCursorLine', 1, true)
     local row = vim.api.nvim_win_get_cursor(win)[1] - 1
     vim.api.nvim_buf_set_extmark(buf, explorer_cursorline, row, 0, {
       end_row = row + 1,
       end_col = 0,
-      hl_group = 'SnacksExplorerCursorLine',
+      hl_group = focused and 'SnacksExplorerCursorLine' or 'CursorLine',
       hl_eol = true,
-      priority = 5000, -- 高于 Snacks 文件名高亮（4096）
+      priority = 0, -- 搜索匹配等文本高亮优先
       ephemeral = true,
     })
   end,
@@ -356,9 +360,20 @@ snacks.setup({
         win = {
           list = {
             b = { snacks_explorer = true },
-            wo = { cursorlineopt = 'number' }, -- 整行底色由上面的高亮绘制
+            wo = { cursorlineopt = 'number' }, -- 文本行由上面的高亮绘制
           },
         },
+        on_show = function(picker)
+          local list_window = picker.list.win
+          -- 在 Explorer 内提亮灰色 Git 状态，保证它们在蓝底上也清楚。
+          local winhighlight = snacks.util.winhl(vim.wo[list_window.win].winhighlight, {
+            SnacksPickerGitStatusUntracked = 'SnacksExplorerDimmed',
+            SnacksPickerGitStatusIgnored = 'SnacksExplorerDimmed',
+            SnacksPickerPathIgnored = 'SnacksExplorerDimmed',
+          })
+          list_window.opts.wo.winhighlight = winhighlight
+          snacks.util.wo(list_window.win, { winhighlight = winhighlight })
+        end,
       },
     },
   },
