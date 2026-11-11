@@ -2,7 +2,7 @@
 
 # 用時間戳建立 Markdown 草稿，並啟用 Neovim 的草稿自動存檔。
 _nvim_draft() (
-  local draft_dir="$HOME/Document/drafts"
+  local draft_dir="$HOME/Documents/drafts"
   mkdir -p -- "$draft_dir" && cd -- "$draft_dir" || return
 
   local draft_file
