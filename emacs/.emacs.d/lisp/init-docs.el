@@ -16,6 +16,10 @@
               markdown-wiki-link-search-subdirectories nil
               markdown-wiki-link-search-parent-directories nil))
 
+;; Table layout uses gfm-mode-hook, Markdown faces, and Emacs overlays.
+;; After an Emacs upgrade, check wrapping and border alignment with line
+;; numbers enabled and in split windows.
+
 (defface lcw-markdown-table-preview-border-face
   '((t :inherit (fixed-pitch font-lock-comment-face)))
   "Face used for Markdown table borders."
@@ -28,10 +32,11 @@
 
 (defvar-local lcw-markdown-table-preview--overlays nil)
 (defvar-local lcw-markdown-table-preview--tables nil)
-(defvar-local lcw-markdown-table-preview--active-table nil)
+(defvar-local lcw-markdown-table-preview--active-row nil)
 (defvar-local lcw-markdown-table-preview--tick -1)
-(defvar-local lcw-markdown-table-preview--window-pixel-width nil)
+(defvar-local lcw-markdown-table-preview--geometry nil)
 (defvar-local lcw-markdown-table-preview--refreshing nil)
+(defvar lcw-markdown-table-preview-mode)
 (defvar-local lcw-markdown-highlighting-keywords-installed nil)
 
 (defun lcw-markdown-enable-obsidian-highlights ()
@@ -117,20 +122,18 @@ split a cell."
                       (let* ((row (lcw-markdown-table-preview--line-info))
                              (cells (plist-get row :cells)))
                         (if (and cells
-                                 (= (length cells) separator-column-count)
                                  (not (lcw-markdown-table-preview--separator-p
                                        cells)))
                             (progn
-                              (setq rows (append rows (list row))
-                                    table-end (plist-get row :end))
+                              (push row rows)
+                              (setq table-end (plist-get row :end))
                               (forward-line 1))
                           (goto-char (point-max))))))
-                  (push (list :start (plist-get header :begin)
-                              :end table-end
+                  (push (list :end table-end
                               :indent (plist-get header :indent)
                               :separator separator
                               :separator-cells separator-cells
-                              :rows rows)
+                              :rows (nreverse rows))
                         tables)
                   (goto-char (min (point-max) (1+ table-end)))))
             (forward-line 1))))
@@ -199,67 +202,115 @@ preview window, so consult the current Dirvish session as a fallback."
           window))
       (selected-window)))
 
+(defun lcw-markdown-table-preview--window-size (window)
+  "Return WINDOW's usable text width and character width in pixels."
+  (let ((unit (max 1 (frame-char-width (window-frame window))))
+        (gutter (if (and display-line-numbers
+                         (eq (window-buffer window) (current-buffer)))
+                    (with-selected-window window (line-number-display-width t))
+                  0)))
+    ;; The body width includes the gutter and the continuation column.
+    (cons (- (window-body-width window t) gutter unit) unit)))
+
+(defun lcw-markdown-table-preview--measure ()
+  "Choose a layout that fits every window showing this buffer."
+  (let ((windows (or (get-buffer-window-list (current-buffer) 'nomini 'visible)
+                     (list (lcw-markdown-table-preview--display-window))))
+        smallest)
+    (dolist (window windows smallest)
+      (let ((size (lcw-markdown-table-preview--window-size window)))
+        (when (or (not smallest) (< (car size) (car smallest)))
+          (setq smallest size))))))
+
 (defun lcw-markdown-table-preview--fit-widths (widths budget unit)
   "Fit pixel WIDTHS within BUDGET, preserving UNIT-sized boundaries.
-Each column receives room for two padding units and, when possible, one unit
-of content.  Remaining space is distributed in proportion to natural width."
-  (let* ((count (length widths))
-         (natural (mapcar (lambda (width) (ceiling width unit)) widths))
-         (budget-units (max count (floor budget unit))))
+Keep short columns at their natural width and share space among long columns."
+  (let* ((natural (mapcar (lambda (width) (ceiling width unit)) widths))
+         (budget-units (floor budget unit)))
     (if (<= (apply #'+ natural) budget-units)
         widths
-      (let* ((minimum (if (>= budget-units (* count 3))
-                          3
-                        (max 1 (/ budget-units count))))
-             (extra-budget (max 0 (- budget-units (* count minimum))))
-             (needs (mapcar (lambda (width) (max 0 (- width minimum)))
-                            natural))
-             (total-need (apply #'+ needs))
-             (fitted
-              (mapcar
-               (lambda (need)
-                 (+ minimum
-                    (if (zerop total-need)
-                        0
-                      (/ (* extra-budget need) total-need))))
-               needs))
-             (remaining (- budget-units (apply #'+ fitted))))
-        ;; Integer division leaves fewer than COUNT units undistributed.
-        (while (> remaining 0)
-          (let ((changed nil))
-            (cl-loop for tail on fitted
-                     for natural-width in natural
-                     when (and (> remaining 0)
-                               (< (car tail) natural-width))
-                     do (setcar tail (1+ (car tail)))
-                     (setq remaining (1- remaining)
-                           changed t))
-            (unless changed
-              (setq remaining 0))))
-        (mapcar (lambda (width) (* width unit)) fitted)))))
+      (let ((sorted (sort (copy-sequence natural) #'<))
+            (available budget-units)
+            (remaining (length natural)))
+        (while (and (cdr sorted) (<= (car sorted) (/ available remaining)))
+          (cl-decf available (pop sorted))
+          (cl-decf remaining))
+        (let ((share (/ available remaining))
+              (extra (% available remaining)))
+          (mapcar (lambda (width)
+                    (* unit (cond
+                             ((<= width share) width)
+                             ((> extra 0)
+                              (cl-decf extra)
+                              (1+ share))
+                             (t share))))
+                  natural))))))
 
-(defun lcw-markdown-table-preview--truncate-cell (cell max-pixels)
-  "Truncate rendered CELL with an ellipsis to fit MAX-PIXELS."
-  (if (<= (lcw-markdown-table-preview--pixel-width cell) max-pixels)
-      cell
-    (let* ((face (and (> (length cell) 0)
-                      (get-text-property 0 'face cell)))
-           (ellipsis (propertize "…" 'face face))
-           (ellipsis-width
-            (lcw-markdown-table-preview--pixel-width ellipsis))
-           (limit (- max-pixels ellipsis-width))
-           (low 0)
-           (high (length cell)))
-      (if (< limit 0)
-          ""
-        (while (< low high)
-          (let ((middle (/ (+ low high 1) 2)))
-            (if (<= (lcw-markdown-table-preview--pixel-width
-                     (substring cell 0 middle))
-                    limit)
-                (setq low middle)
-              (setq high (1- middle)))))
-        (concat (substring cell 0 low) ellipsis)))))
+(defun lcw-markdown-table-preview--fragment-end (cell offsets start limit)
+  "Find the last glyph boundary in CELL that fits LIMIT pixels from START.
+START and the result index the glyph boundaries in OFFSETS."
+  (let* ((begin (aref offsets start))
+         (last (1- (length offsets)))
+         (low start)
+         (high (1+ start)))
+    ;; Probe only the next fragment, even for a cell spanning many lines.
+    (cl-labels ((fits (end)
+                  (<= (lcw-markdown-table-preview--pixel-width
+                       (substring cell begin (aref offsets end)))
+                      limit)))
+      (while (and (< high last) (fits high))
+        (setq low high
+              high (min last (+ start (* 2 (- high start))))))
+      (while (< low high)
+        (let ((middle (/ (+ low high 1) 2)))
+          (if (fits middle)
+              (setq low middle)
+            (setq high (1- middle))))))
+    low))
+
+(cl-defun lcw-markdown-table-preview--wrap-cell (cell width unit)
+  "Wrap CELL to WIDTH pixels, allowing UNIT pixels of padding on each side."
+  (let ((limit (- width (* 2 unit))))
+    (if (<= (lcw-markdown-table-preview--pixel-width cell) limit)
+        (list cell)
+      (let* ((offset 0)
+             (offsets (vconcat '(0) (mapcar (lambda (glyph)
+                                            (cl-incf offset (length glyph)))
+                                          (string-glyph-split cell))))
+             (last (1- (length offsets)))
+             (start 0)
+             lines)
+        (while (< start last)
+          (let* ((begin (aref offsets start))
+                 (end (lcw-markdown-table-preview--fragment-end
+                       cell offsets start limit)))
+            (cond
+             ((= end start)
+              ;; Give a wide glyph some of the padding in a narrow column.
+              (setq end (1+ start))
+              (when (> (lcw-markdown-table-preview--pixel-width
+                        (substring cell begin (aref offsets end)))
+                       width)
+                (cl-return-from lcw-markdown-table-preview--wrap-cell nil)))
+             ((and (< end last)
+                   (< (aref cell (aref offsets end)) 128)
+                   (not (eq (aref cell (aref offsets end)) ?\s)))
+              ;; Prefer word boundaries in Latin text.  Chinese and long
+              ;; unbroken tokens can wrap at any glyph boundary.
+              (setq end
+                    (or (cl-loop for boundary from end downto (+ start 2)
+                                 when (eq (aref cell
+                                                (1- (aref offsets boundary)))
+                                          ?\s)
+                                 return boundary)
+                        end))))
+            (push (string-trim-right
+                   (substring cell begin (aref offsets end)) " +")
+                  lines)
+            (setq start end)
+            (while (and (< start last) (eq (aref cell (aref offsets start)) ?\s))
+              (cl-incf start))))
+        (nreverse lines)))))
 
 (defun lcw-markdown-table-preview--pixel-space (pixels)
   "Return a display string occupying exactly PIXELS horizontal pixels."
@@ -272,28 +323,37 @@ of content.  Remaining space is distributed in proportion to natural width."
   "Pad rendered CELL to pixel WIDTH according to ALIGNMENT.
 UNIT is one canonical fixed-pitch character in pixels."
   (let* ((content-width (lcw-markdown-table-preview--pixel-width cell))
-         (space (max 0 (- width content-width (* 2 unit))))
+         (available (- width content-width))
+         (padding (min unit (/ available 2)))
+         (space (- available (* 2 padding)))
          (left-extra (pcase alignment
                        ('right space)
                        ('center (/ space 2))
                        (_ 0)))
          (right-extra (- space left-extra)))
-    (concat (lcw-markdown-table-preview--pixel-space (+ unit left-extra))
+    (concat (lcw-markdown-table-preview--pixel-space (+ padding left-extra))
             cell
-            (lcw-markdown-table-preview--pixel-space (+ unit right-extra)))))
+            (lcw-markdown-table-preview--pixel-space (+ padding right-extra)))))
 
-(defun lcw-markdown-table-preview--add-overlay (begin end &rest properties)
-  "Create and remember a table preview overlay from BEGIN to END."
-  (let ((overlay (make-overlay begin end nil t nil)))
-    (overlay-put overlay 'lcw-markdown-table-preview t)
-    ;; Zero-width overlays carry the virtual top and bottom borders.  Giving
-    ;; those overlays `evaporate' would delete them as soon as they are made.
-    (when (< begin end)
-      (overlay-put overlay 'evaporate t))
-    (while properties
-      (overlay-put overlay (pop properties) (pop properties)))
-    (push overlay lcw-markdown-table-preview--overlays)
-    overlay))
+(defun lcw-markdown-table-preview--row-lines (cells widths alignments unit border)
+  "Wrap CELLS, pad them to WIDTHS with ALIGNMENTS, and join using BORDER."
+  (let ((columns (cl-mapcar (lambda (cell width)
+                             (lcw-markdown-table-preview--wrap-cell
+                              cell width unit))
+                           cells widths))
+        lines)
+    (when (cl-every #'consp columns)
+      (while (cl-some #'consp columns)
+        (push (concat (string-join
+                       (cl-mapcar (lambda (column width alignment)
+                                    (lcw-markdown-table-preview--pad-cell
+                                     (or (car column) "") width alignment unit))
+                                  columns widths alignments)
+                       border)
+                      border)
+              lines)
+        (setq columns (mapcar #'cdr columns)))
+      (nreverse lines))))
 
 (defun lcw-markdown-table-preview--rule (left middle right widths unit)
   "Build a table rule using LEFT, MIDDLE, RIGHT, WIDTHS, and pixel UNIT."
@@ -302,108 +362,95 @@ UNIT is one canonical fixed-pitch character in pixels."
                      widths middle)
           right))
 
-(defun lcw-markdown-table-preview--render (table)
-  "Render TABLE with display-only Unicode borders."
+(defun lcw-markdown-table-preview--add-row (row leading tail &optional top bottom)
+  "Show ROW with LEADING and TAIL text, plus optional TOP and BOTTOM rules."
+  (let ((overlay (make-overlay (plist-get row :begin) (plist-get row :end)
+                               nil t nil))
+        (trailing (concat tail bottom)))
+    ;; A nonempty replacement gives visual line motion a cursor position.
+    ;; Pixel-width padding inside TAIL needs a separate overlay string.
+    (overlay-put overlay 'display leading)
+    (overlay-put overlay 'before-string top)
+    (overlay-put overlay 'after-string trailing)
+    (overlay-put overlay 'lcw-markdown-table-preview t)
+    (overlay-put overlay 'lcw-markdown-table-preview-row (cons leading trailing))
+    (overlay-put overlay 'lcw-markdown-table-preview-bottom bottom)
+    (overlay-put overlay 'evaporate t)
+    (push overlay lcw-markdown-table-preview--overlays)))
+
+(defun lcw-markdown-table-preview--render (table window-width unit)
+  "Render TABLE within WINDOW-WIDTH pixels using the character width UNIT."
   (let* ((rows (plist-get table :rows))
          (separator (plist-get table :separator))
          (separator-cells (plist-get table :separator-cells))
          (column-count (length separator-cells))
-         (alignments (mapcar #'lcw-markdown-table-preview--alignment
-                             separator-cells))
-         (unit (max 1 (frame-char-width)))
-         (raw-rendered-rows
-          (cl-loop for row in rows
-                   for first = t then nil
-                   for face = (if first
-                                  '(lcw-markdown-table-preview-header-face
-                                    fixed-pitch)
-                                '(markdown-table-face fixed-pitch))
-                   collect
-                   (mapcar (lambda (cell)
-                             (lcw-markdown-table-preview--inline cell face))
-                           (plist-get row :cells))))
-         (natural-widths
-          (cl-loop for column below column-count
-                   collect
-                   (let ((needed
-                          (+ (* 2 unit)
-                             (cl-loop for cells in raw-rendered-rows
-                                      maximize
-                                      (lcw-markdown-table-preview--pixel-width
-                                       (nth column cells))))))
-                     ;; Box-drawing glyphs occupy one canonical character.
-                     ;; Rounding makes every junction land on a glyph edge.
-                     (* unit (ceiling needed unit)))))
          (indent (plist-get table :indent))
-         (window (lcw-markdown-table-preview--display-window))
-         (window-width (if (window-live-p window)
-                           (window-body-width window t)
-                         (* 100 unit)))
-         ;; Leave one character of slack so redisplay never wraps a virtual
-         ;; border because of rounding at the right edge.
          (column-budget
-          (max (* column-count unit)
-               (- window-width
-                  (lcw-markdown-table-preview--pixel-width indent)
-                  (* (+ column-count 2) unit))))
-         (widths
-          (lcw-markdown-table-preview--fit-widths
-           natural-widths column-budget unit))
-         (rendered-rows
-          (mapcar
-           (lambda (cells)
-             (cl-mapcar
-              (lambda (cell width)
-                (lcw-markdown-table-preview--truncate-cell
-                 cell (max unit (- width (* 2 unit)))))
-              cells widths))
-           raw-rendered-rows))
-         (top (lcw-markdown-table-preview--rule "┌" "┬" "┐" widths unit))
-         (middle (lcw-markdown-table-preview--rule "├" "┼" "┤" widths unit))
-         (bottom (lcw-markdown-table-preview--rule "└" "┴" "┘" widths unit))
-         (vertical (propertize "│"
-                              'face 'lcw-markdown-table-preview-border-face)))
-    (setq lcw-markdown-table-preview--window-pixel-width window-width)
-    (cl-loop for row in rows
-             for cells in rendered-rows
-             for first = t then nil
-             do
-             (let ((rendered
-                    (concat indent vertical
-                            (mapconcat
-                             #'identity
-                             (cl-mapcar #'lcw-markdown-table-preview--pad-cell
-                                        cells widths alignments
-                                        (make-list column-count unit))
-                             vertical)
-                            vertical)))
-               (lcw-markdown-table-preview--add-overlay
-                (plist-get row :begin) (plist-get row :end)
-                ;; A display string used as an overlay's replacement ignores
-                ;; display properties nested inside that string.  Put the
-                ;; rendered row in `before-string' instead, and replace the
-                ;; source with an empty display.  Pixel-width spaces are then
-                ;; honored by the actual redisplay engine.
-                'display ""
-                'before-string
-                (if first
-                    (concat
-                     (propertize (concat indent top "\n")
-                                 'face
-                                 'lcw-markdown-table-preview-border-face)
-                     rendered)
-                  rendered))))
-    (lcw-markdown-table-preview--add-overlay
-     (plist-get separator :begin) (plist-get separator :end)
-     'display ""
-     'before-string
-     (propertize (concat indent middle)
-                 'face 'lcw-markdown-table-preview-border-face))
-    (lcw-markdown-table-preview--add-overlay
-     (plist-get table :end) (plist-get table :end)
-     'after-string
-     (propertize (concat "\n" indent bottom)
-                 'face 'lcw-markdown-table-preview-border-face))))
+          (- window-width
+             (lcw-markdown-table-preview--pixel-width indent)
+             (* (1+ column-count) unit))))
+    ;; Show source when the pane cannot fit the borders and minimum cells.
+    (when (>= column-budget (* 3 column-count unit))
+      (let* ((alignments (mapcar #'lcw-markdown-table-preview--alignment
+                                 separator-cells))
+             (raw-rows
+              (cl-loop for row in rows
+                       for first = t then nil
+                       for face = (if first
+                                      '(lcw-markdown-table-preview-header-face
+                                        fixed-pitch)
+                                    '(markdown-table-face fixed-pitch))
+                       collect
+                       (let ((cells (plist-get row :cells)))
+                         ;; GFM pads short rows and ignores cells past the header.
+                         (cl-loop repeat column-count
+                                  collect (lcw-markdown-table-preview--inline
+                                           (string-replace "\t" " " (or (pop cells) ""))
+                                           face)))))
+             (natural-widths
+              (cl-loop for column below column-count
+                       collect
+                       (let ((content-width
+                              (cl-loop for cells in raw-rows
+                                       maximize
+                                       (lcw-markdown-table-preview--pixel-width
+                                        (nth column cells)))))
+                         (* unit (+ 2 (ceiling content-width unit))))))
+             (widths (lcw-markdown-table-preview--fit-widths
+                      natural-widths column-budget unit))
+             (border-face 'lcw-markdown-table-preview-border-face)
+             (top (propertize
+                   (concat indent (lcw-markdown-table-preview--rule
+                                   "┌" "┬" "┐" widths unit) "\n")
+                   'face border-face))
+             (middle (lcw-markdown-table-preview--rule "├" "┼" "┤" widths unit))
+             (bottom (propertize
+                      (concat "\n" indent (lcw-markdown-table-preview--rule
+                                           "└" "┴" "┘" widths unit))
+                      'face border-face))
+             (vertical (propertize "│" 'face border-face))
+             (leading (concat indent vertical))
+             (continuation (concat "\n" leading))
+             (rendered-rows
+              (mapcar (lambda (cells)
+                        (lcw-markdown-table-preview--row-lines
+                         cells widths alignments unit vertical))
+                      raw-rows)))
+        ;; A glyph wider than its entire column must stay visible as source.
+        (when (cl-every #'consp rendered-rows)
+          (cl-loop for row in rows
+                   for lines in rendered-rows
+                   for first = t then nil
+                   do (lcw-markdown-table-preview--add-row
+                       row leading (string-join lines continuation)
+                       (when first top)
+                       (when (= (plist-get row :end) (plist-get table :end))
+                         bottom)))
+          (lcw-markdown-table-preview--add-row
+           separator
+           (concat indent (propertize (substring middle 0 1) 'face border-face))
+           (propertize (substring middle 1) 'face border-face)
+           nil (when (null (cdr rows)) bottom)))))))
 
 (defun lcw-markdown-table-preview--clear ()
   "Remove all table preview overlays from the current buffer."
@@ -414,54 +461,54 @@ UNIT is one canonical fixed-pitch character in pixels."
     (when (overlay-get overlay 'lcw-markdown-table-preview)
       (delete-overlay overlay)))
   (mapc #'delete-overlay lcw-markdown-table-preview--overlays)
-  (setq lcw-markdown-table-preview--overlays nil))
+  (setq lcw-markdown-table-preview--overlays nil
+        lcw-markdown-table-preview--active-row nil))
 
-(defun lcw-markdown-table-preview--table-at-point (tables)
-  "Return the member of TABLES containing point."
-  (cl-find-if (lambda (table)
-                (and (<= (plist-get table :start) (point))
-                     (<= (point) (1+ (plist-get table :end)))))
-              tables))
+(defun lcw-markdown-table-preview--reveal-row ()
+  "Show the source of the row at point and restore the previous row."
+  (let ((row (unless buffer-read-only
+               (cl-find-if
+                (lambda (overlay)
+                  (overlay-get overlay 'lcw-markdown-table-preview-row))
+                (overlays-at (line-beginning-position)))))
+        (previous lcw-markdown-table-preview--active-row))
+    (unless (eq row previous)
+      (when previous
+        (let ((preview (overlay-get previous 'lcw-markdown-table-preview-row)))
+          (overlay-put previous 'display (car preview))
+          (overlay-put previous 'after-string (cdr preview))))
+      (when row
+        (overlay-put row 'display nil)
+        (overlay-put row 'after-string
+                     (overlay-get row 'lcw-markdown-table-preview-bottom)))
+      (setq lcw-markdown-table-preview--active-row row))))
 
 (defun lcw-markdown-table-preview-refresh (&optional force)
   "Refresh in-buffer Markdown table previews.
-With FORCE, rebuild previews even when neither text nor point context changed."
+With FORCE, rebuild previews even if the text and window size are unchanged."
   (when (and lcw-markdown-table-preview-mode
              (not lcw-markdown-table-preview--refreshing))
-    (let ((lcw-markdown-table-preview--refreshing t))
-      (let* ((tick (buffer-chars-modified-tick))
-             (text-changed (/= tick lcw-markdown-table-preview--tick))
-             (tables (if text-changed
-                         (lcw-markdown-table-preview--scan)
-                       lcw-markdown-table-preview--tables))
-             (active (lcw-markdown-table-preview--table-at-point tables)))
+    (let* ((lcw-markdown-table-preview--refreshing t)
+           (tick (buffer-chars-modified-tick))
+           (text-changed (/= tick lcw-markdown-table-preview--tick))
+           (geometry (lcw-markdown-table-preview--measure)))
+      (save-restriction
+        (widen)
         (when (or force text-changed
-                  (not (equal active
-                              lcw-markdown-table-preview--active-table)))
+                  (not (equal geometry lcw-markdown-table-preview--geometry)))
+          (when text-changed
+            (setq lcw-markdown-table-preview--tables
+                  (lcw-markdown-table-preview--scan)))
           (lcw-markdown-table-preview--clear)
-          (setq lcw-markdown-table-preview--tables tables
-                lcw-markdown-table-preview--active-table active
+          (setq lcw-markdown-table-preview--geometry geometry
                 lcw-markdown-table-preview--tick tick)
-          (dolist (table tables)
-            ;; Reveal the source of the table being edited.  Other tables stay
-            ;; rendered, like anti-conceal behavior in live-preview editors.
-            (unless (equal table active)
-              (lcw-markdown-table-preview--render table))))))))
+          (dolist (table lcw-markdown-table-preview--tables)
+            (lcw-markdown-table-preview--render table (car geometry) (cdr geometry))))
+        (lcw-markdown-table-preview--reveal-row)))))
 
-(defun lcw-markdown-table-preview-refresh-visible-windows ()
-  "Reflow visible table previews whose window width has changed."
-  (dolist (window (window-list (selected-frame) 'nomini))
-    (when (window-live-p window)
-      (with-current-buffer (window-buffer window)
-        (when lcw-markdown-table-preview-mode
-          (let ((width (window-body-width window t)))
-            (unless (equal width
-                           lcw-markdown-table-preview--window-pixel-width)
-              (setq lcw-markdown-table-preview--window-pixel-width width)
-              (lcw-markdown-table-preview-refresh t))))))))
-
-(add-hook 'window-configuration-change-hook
-          #'lcw-markdown-table-preview-refresh-visible-windows)
+(defun lcw-markdown-table-preview--before-redisplay (_window)
+  "Refresh the preview when redisplay changes the available width."
+  (lcw-markdown-table-preview-refresh))
 
 (define-minor-mode lcw-markdown-table-preview-mode
   "Render GFM pipe tables in place while keeping their source editable."
@@ -470,14 +517,19 @@ With FORCE, rebuild previews even when neither text nor point context changed."
       (progn
         (add-hook 'post-command-hook
                   #'lcw-markdown-table-preview-refresh nil t)
+        (add-hook 'pre-redisplay-functions
+                  #'lcw-markdown-table-preview--before-redisplay nil t)
+        (add-hook 'change-major-mode-hook #'lcw-markdown-table-preview--clear nil t)
         (lcw-markdown-table-preview-refresh t))
     (remove-hook 'post-command-hook
                  #'lcw-markdown-table-preview-refresh t)
+    (remove-hook 'pre-redisplay-functions
+                 #'lcw-markdown-table-preview--before-redisplay t)
+    (remove-hook 'change-major-mode-hook #'lcw-markdown-table-preview--clear t)
     (lcw-markdown-table-preview--clear)
     (setq lcw-markdown-table-preview--tables nil
-          lcw-markdown-table-preview--active-table nil
           lcw-markdown-table-preview--tick -1
-          lcw-markdown-table-preview--window-pixel-width nil)))
+          lcw-markdown-table-preview--geometry nil)))
 
 (defun lcw-markdown-pretty ()
   "Use a more Obsidian-like Markdown display."
@@ -485,6 +537,93 @@ With FORCE, rebuild previews even when neither text nor point context changed."
   (lcw-markdown-enable-obsidian-highlights)
   (when (display-images-p)
     (markdown-display-inline-images)))
+
+;; When updating vendor/markdown-mode, check the markdown-markup invisibility
+;; category, display/composition properties, and markdown-inline-image-overlays.
+;; Verify that moving onto and off a line still reveals and restores markup,
+;; URLs, and images after font-lock runs.
+
+(defvar markdown-inline-image-overlays)
+(defvar-local lcw-markdown-reveal-line--range nil)
+(defvar-local lcw-markdown-reveal-line--images nil)
+
+(defun lcw-markdown-reveal-line--show-source (begin end)
+  "Expose Markdown syntax between BEGIN and END while keeping syntax faces."
+  (when (< begin end)
+    (with-silent-modifications
+      (remove-list-of-text-properties begin end '(display composition))
+      (while (< begin end)
+        (let ((next (next-single-property-change begin 'invisible nil end)))
+          (when (eq (get-text-property begin 'invisible) 'markdown-markup)
+            (remove-list-of-text-properties begin next '(invisible)))
+          (setq begin next))))))
+
+(defun lcw-markdown-reveal-line--after-fontify (&rest _)
+  "Keep font-lock from concealing markup on the editing line."
+  (when-let* ((range lcw-markdown-reveal-line--range)
+              (begin (overlay-start range)))
+    (lcw-markdown-reveal-line--show-source
+     (max (point-min) begin)
+     (min (point-max) (overlay-end range)))))
+
+(defun lcw-markdown-reveal-line--restore-images ()
+  "Restore image previews suppressed on the editing line."
+  (dolist (entry lcw-markdown-reveal-line--images)
+    (when (overlay-buffer (car entry))
+      (overlay-put (car entry) 'display (cdr entry))))
+  (setq lcw-markdown-reveal-line--images nil))
+
+(defun lcw-markdown-reveal-line--refresh ()
+  "Reveal the logical line at point and refontify the previous line."
+  (save-restriction
+    (widen)
+    (let ((begin (line-beginning-position))
+          (end (line-beginning-position 2))
+          (range lcw-markdown-reveal-line--range))
+      (unless (and range (eql begin (overlay-start range))
+                   (= end (overlay-end range)))
+        (when (and range (overlay-buffer range))
+          (font-lock-flush (overlay-start range) (overlay-end range)))
+        (if range
+            (move-overlay range begin end)
+          (setq lcw-markdown-reveal-line--range
+                (make-overlay begin end nil nil t)))
+        (lcw-markdown-reveal-line--show-source begin end)
+        (lcw-markdown-reveal-line--restore-images))
+      ;; Also catch image overlays created by a command on the same line.
+      (when markdown-inline-image-overlays
+        (dolist (overlay (overlays-in begin end))
+          (when-let* ((image (overlay-get overlay 'display))
+                      ((memq overlay markdown-inline-image-overlays)))
+            (push (cons overlay image) lcw-markdown-reveal-line--images)
+            (overlay-put overlay 'display nil)))))))
+
+(defun lcw-markdown-reveal-line--disable ()
+  "Remove the editing-line overrides and restore the usual preview."
+  (remove-hook 'post-command-hook #'lcw-markdown-reveal-line--refresh t)
+  (remove-hook 'change-major-mode-hook #'lcw-markdown-reveal-line--disable t)
+  (remove-function (local 'font-lock-fontify-region-function)
+                   #'lcw-markdown-reveal-line--after-fontify)
+  (lcw-markdown-reveal-line--restore-images)
+  (when-let* ((range lcw-markdown-reveal-line--range)
+              (begin (overlay-start range)))
+    (save-restriction
+      (widen)
+      (font-lock-flush begin (overlay-end range)))
+    (delete-overlay range))
+  (setq lcw-markdown-reveal-line--range nil))
+
+(define-minor-mode lcw-markdown-reveal-line-mode
+  "Show Markdown source on the editing line and preview elsewhere."
+  :init-value nil
+  (if lcw-markdown-reveal-line-mode
+      (progn
+        (add-function :after (local 'font-lock-fontify-region-function)
+                      #'lcw-markdown-reveal-line--after-fontify)
+        (add-hook 'post-command-hook #'lcw-markdown-reveal-line--refresh nil t)
+        (add-hook 'change-major-mode-hook #'lcw-markdown-reveal-line--disable nil t)
+        (lcw-markdown-reveal-line--refresh))
+    (lcw-markdown-reveal-line--disable)))
 
 (defun lcw-markdown-dirvish-preview-setup ()
   "Apply the normal Markdown presentation to a Dirvish preview buffer.
@@ -502,7 +641,10 @@ the regular `gfm-mode-hook' setup must be applied from its preview hook."
 (use-package markdown-mode
   :if (locate-library "markdown-mode")
   :mode (("\\.\\(?:md\\|markdown\\)\\'" . gfm-mode))
-  :hook ((gfm-mode . lcw-markdown-limit-wiki-search)
+  :hook ((markdown-mode . (lambda ()
+                            (unless buffer-read-only
+                              (lcw-markdown-reveal-line-mode 1))))
+         (gfm-mode . lcw-markdown-limit-wiki-search)
          (gfm-mode . lcw-markdown-pretty)
          (gfm-mode . lcw-markdown-table-preview-mode))
   :bind (:map markdown-mode-map
