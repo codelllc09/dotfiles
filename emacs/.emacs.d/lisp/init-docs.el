@@ -1,4 +1,4 @@
-;;; init-docs.el --- Long-form documents: Markdown and PDF -*- lexical-binding: t; -*-
+;;; init-docs.el --- Long-form documents: Markdown, Typst and PDF -*- lexical-binding: t; -*-
 
 (declare-function pdf-loader-install "pdf-tools.el")
 
@@ -8,7 +8,10 @@
 ;; buffers deliberately skip major-mode hooks.
 
 ;; Markdown remains a portable editing format; Obsidian manages the vault.
+(require 'bindat)
 (require 'cl-lib)
+(require 'project)
+(require 'treesit)
 
 (defun lcw-markdown-limit-wiki-search ()
   "Recognize wiki links without recursively scanning large repositories."
@@ -662,6 +665,463 @@ the regular `gfm-mode-hook' setup must be applied from its preview hook."
   (let ((entry '("\\.\\(?:md\\|markdown\\)\\'" . gfm-mode)))
     (setq auto-mode-alist (delete entry auto-mode-alist))
     (push entry auto-mode-alist)))
+
+(use-package typst-ts-mode
+  :if (locate-library "typst-ts-mode")
+  :mode "\\.typ\\'")
+
+(defvar lcw-typst-markup-preview--query nil)
+(defvar-local lcw-typst-markup-preview--line nil)
+
+(defun lcw-typst-markup-preview--show-line (position source)
+  "Show SOURCE or rendered markers on the line containing POSITION."
+  (save-excursion
+    (goto-char position)
+    (dolist (overlay (overlays-in (line-beginning-position) (line-end-position)))
+      (when-let* ((display (overlay-get overlay 'lcw-typst-markup-display)))
+        (overlay-put overlay 'display (unless source display))))))
+
+(defun lcw-typst-markup-preview--reveal-line ()
+  (save-restriction
+    (widen)
+    (let* ((line (line-beginning-position))
+           (marker lcw-typst-markup-preview--line)
+           (previous (and marker (marker-position marker))))
+      (unless (eql line previous)
+        (when previous
+          (lcw-typst-markup-preview--show-line previous nil))
+        (if marker
+            (set-marker marker line)
+          (setq lcw-typst-markup-preview--line (copy-marker line)))
+        (lcw-typst-markup-preview--show-line line t)))))
+
+(defun lcw-typst-markup-preview--add-marker (kind node begin end editing-line)
+  (let ((start (treesit-node-start node))
+        (stop (treesit-node-end node)))
+    (when (and (<= begin start) (< start stop) (<= stop end)
+               (or (not (eq kind 'inline))
+                   (not (treesit-node-check (treesit-node-parent node) 'has-error))))
+      (goto-char start)
+      (let ((editing (eql (line-beginning-position) editing-line))
+            (display (if (eq kind 'bullet) "•" "")))
+        (when (eq kind 'heading)
+          (let* ((level (- stop start))
+                 (typst-face (intern (format "typst-ts-markup-header-face-%d" level)))
+                 (face (if (featurep 'markdown-mode)
+                           (list :inherit (intern (format "markdown-header-face-%d" level))
+                                 :height (face-attribute typst-face :height)
+                                 :weight (face-attribute typst-face :weight nil t))
+                         typst-face))
+                 (overlay (make-overlay start (treesit-node-end (treesit-node-parent node)))))
+            (overlay-put overlay 'lcw-typst-markup-preview t)
+            (overlay-put overlay 'evaporate t)
+            (overlay-put overlay 'face face))
+          (goto-char stop)
+          (skip-chars-forward " \t" (line-end-position))
+          (setq stop (point)))
+        (let ((overlay (make-overlay start stop)))
+          (overlay-put overlay 'lcw-typst-markup-preview t)
+          (overlay-put overlay 'evaporate t)
+          (overlay-put overlay 'lcw-typst-markup-display display)
+          (unless editing
+            (overlay-put overlay 'display display)))))))
+
+(defun lcw-typst-markup-preview--fontify (begin end)
+  "Show Typst heading, list, and emphasis markup in the fontified region."
+  (save-restriction
+    (widen)
+    (save-excursion
+      (goto-char begin)
+      (setq begin (line-beginning-position))
+      (goto-char end)
+      (unless (bolp)
+        (setq end (line-beginning-position 2)))
+      (dolist (overlay (overlays-in begin end))
+        (when (overlay-get overlay 'lcw-typst-markup-preview)
+          (delete-overlay overlay)))
+      (when (< begin end)
+        (let ((editing-line (marker-position lcw-typst-markup-preview--line))
+              (query (or lcw-typst-markup-preview--query
+                         (setq lcw-typst-markup-preview--query
+                               (treesit-query-compile
+                                'typst
+                                '((heading ["=" "==" "===" "====" "=====" "======"] @heading)
+                                  ((item "-" @bullet) (:equal "-" @bullet))
+                                  (strong "*" @inline "*" @inline)
+                                  (emph "_" @inline "_" @inline)))))))
+          (dolist (capture (treesit-query-capture 'typst query begin end))
+            (lcw-typst-markup-preview--add-marker
+             (car capture) (cdr capture) begin end editing-line)))))))
+
+(defun lcw-typst-markup-preview--disable ()
+  (jit-lock-unregister #'lcw-typst-markup-preview--fontify)
+  (remove-hook 'post-command-hook #'lcw-typst-markup-preview--reveal-line t)
+  (remove-hook 'change-major-mode-hook #'lcw-typst-markup-preview--disable t)
+  (save-restriction
+    (widen)
+    (remove-overlays (point-min) (point-max) 'lcw-typst-markup-preview t))
+  (when lcw-typst-markup-preview--line
+    (set-marker lcw-typst-markup-preview--line nil)
+    (setq lcw-typst-markup-preview--line nil)))
+
+(define-minor-mode lcw-typst-markup-preview-mode
+  "Show rendered headings, bullet lists, and emphasis in Typst."
+  :lighter nil
+  (if (and lcw-typst-markup-preview-mode (derived-mode-p 'typst-ts-mode))
+      (progn
+        (require 'markdown-mode nil t)
+        (lcw-typst-markup-preview--reveal-line)
+        (add-hook 'post-command-hook #'lcw-typst-markup-preview--reveal-line nil t)
+        (add-hook 'change-major-mode-hook #'lcw-typst-markup-preview--disable nil t)
+        (jit-lock-register #'lcw-typst-markup-preview--fontify))
+    (setq lcw-typst-markup-preview-mode nil)
+    (lcw-typst-markup-preview--disable)))
+
+(add-hook 'typst-ts-mode-hook #'lcw-typst-markup-preview-mode)
+
+;; Typst's formula overlays and these block overlays share the source buffer.
+(defvar lcw-typst-block-preview--process nil)
+(defvar lcw-typst-block-preview-mode)
+(defvar-local lcw-typst-block-preview--timer nil)
+(defvar-local lcw-typst-block-preview--view nil)
+(defvar-local lcw-typst-block-preview--overlays nil)
+(defvar-local lcw-typst-block-preview--cache nil)
+(defvar-local lcw-typst-block-preview--root nil)
+(defvar-local lcw-typst-block-preview--editing nil)
+(defvar lcw-typst-block-preview--block-query nil)
+(defvar lcw-typst-block-preview--prelude-query nil)
+(defvar lcw-typst-block-preview--path-query nil)
+
+(defun lcw-typst-block-preview--source (node directory root)
+  "Return NODE's source with literal import and image paths relative to ROOT."
+  (let ((source (treesit-node-text node t)))
+    (unless (equal directory root)
+      (let ((start (treesit-node-start node))
+            (paths (treesit-query-capture
+                    node
+                    (or lcw-typst-block-preview--path-query
+                        (setq lcw-typst-block-preview--path-query
+                              (treesit-query-compile
+                               'typst
+                               '((import import: (string) @path)
+                                 ((call item: (ident) @image (group (string) @path))
+                                  (:equal "image" @image)))))))))
+        (dolist (capture (reverse paths))
+          (when (eq (car capture) 'path)
+            (let* ((path (cdr capture))
+                   (text (treesit-node-text path t)))
+              (when (string-match-p "\\`\"[^/@\"\\\\][^\"\\\\\n]*\"\\'" text)
+                (let* ((name (substring text 1 -1))
+                       (absolute (expand-file-name (concat "./" name) directory)))
+                  (when (string-prefix-p root absolute)
+                    (setq source
+                          (concat (substring source 0 (- (treesit-node-start path) start))
+                                  (json-serialize (concat "/" (substring absolute (length root))))
+                                  (substring source (- (treesit-node-end path) start))))))))))))
+    source))
+
+(defun lcw-typst-block-preview--contains-point-p (overlay point)
+  (<= (overlay-start overlay) point (overlay-end overlay)))
+
+(defun lcw-typst-block-preview--display (overlay)
+  (let ((display (unless (lcw-typst-block-preview--contains-point-p overlay (point))
+                   (overlay-get overlay 'lcw-typst-image))))
+    (unless (eq display (overlay-get overlay 'display))
+      (overlay-put overlay 'display display))))
+
+(defun lcw-typst-block-preview--small-png-p (data)
+  "Check DATA's PNG dimensions before giving it to the display engine."
+  (when (and (>= (length data) 24)
+             (string-prefix-p "\211PNG\r\n\032\n" data)
+             (equal (substring data 12 16) "IHDR"))
+    (let ((size (bindat-unpack '((width u32) (height u32)) data 16)))
+      (and (<= 1 (bindat-get-field size 'width) 1600)
+           (<= 1 (bindat-get-field size 'height) 1600)))))
+
+(defun lcw-typst-block-preview--make-image (png)
+  (when (stringp png)
+    (create-image png 'png t :max-width (nth 3 lcw-typst-block-preview--view)
+                  :max-height 720)))
+
+(defun lcw-typst-block-preview--forget-overlay (overlay)
+  (when-let* ((image (overlay-get overlay 'lcw-typst-image)))
+    (image-flush image))
+  (delete-overlay overlay))
+
+(defun lcw-typst-block-preview--filter (process output)
+  ;; Stop reading after 1 MiB, even if the compiler keeps writing.
+  (let ((size (+ (or (process-get process 'bytes) 0) (string-bytes output))))
+    (if (> size (* 1024 1024))
+        (progn
+          (process-put process 'oversized t)
+          (delete-process process))
+      (process-put process 'bytes size)
+      (process-put process 'chunks (cons output (process-get process 'chunks))))))
+
+(defun lcw-typst-block-preview--finished (process _event)
+  (when (memq (process-status process) '(exit signal failed))
+    (when (eq lcw-typst-block-preview--process process)
+      (setq lcw-typst-block-preview--process nil))
+    (when-let* ((timer (process-get process 'timeout)))
+      (cancel-timer timer))
+    (when-let* ((input (process-get process 'input)))
+      (ignore-errors (delete-file input)))
+    (when-let* ((stderr (process-get process 'stderr))
+                ((process-live-p stderr)))
+      (delete-process stderr))
+    (let* ((buffer (process-get process 'owner))
+           (key (process-get process 'key))
+           (png (and (not (process-get process 'oversized))
+                     (zerop (process-exit-status process))
+                     (apply #'concat (nreverse (process-get process 'chunks)))))
+           (data (if (and png (lcw-typst-block-preview--small-png-p png)) png 'failed)))
+      (when (and (buffer-live-p buffer) (not (process-get process 'cancelled)))
+        (with-current-buffer buffer
+          (when lcw-typst-block-preview-mode
+            (setq lcw-typst-block-preview--cache
+                  (seq-take (cons (cons key data) lcw-typst-block-preview--cache) 12))
+            (dolist (overlay lcw-typst-block-preview--overlays)
+              (when (and (equal key (car (overlay-get overlay 'lcw-typst-source)))
+                         (= (buffer-chars-modified-tick) (overlay-get overlay 'lcw-typst-tick)))
+                (overlay-put overlay 'lcw-typst-image (lcw-typst-block-preview--make-image data))
+                (lcw-typst-block-preview--display overlay)))))))
+    (lcw-typst-block-preview--next)))
+
+(defun lcw-typst-block-preview--compile (source)
+  (let ((default-directory lcw-typst-block-preview--root)
+        (coding-system-for-write 'utf-8-unix)
+        input stderr)
+    (condition-case nil
+        (progn
+          (setq input (make-temp-file "emacs-typst-block-"))
+          (write-region (cdr source) nil input nil 'silent)
+          (setq stderr (make-pipe-process :name "typst-block-preview-stderr"
+                                          :noquery t :filter #'ignore :sentinel #'ignore))
+          (let* ((command (list (executable-find "typst") "compile" "--jobs" "1"
+                                "--root" default-directory "--format" "png" "--ppi" "144" "-" "-"))
+                 (prlimit (executable-find "prlimit"))
+                 ;; Redirect stdin without blocking Emacs on process-send-string.
+                 (process (make-process
+                           :name "typst-block-preview" :connection-type 'pipe
+                           :command (append (list "/bin/sh" "-c"
+                                                  "exec < \"$1\"; rm -f -- \"$1\"; shift; exec \"$@\""
+                                                  "typst-block-preview" input)
+                                            (when prlimit
+                                              (list prlimit "--as=536870912" "--"))
+                                            command)
+                           :coding 'binary :noquery t :stderr stderr
+                           :filter #'lcw-typst-block-preview--filter
+                           :sentinel #'lcw-typst-block-preview--finished)))
+            (setq lcw-typst-block-preview--process process)
+            (process-put process 'input input)
+            (process-put process 'stderr stderr)
+            (process-put process 'owner (current-buffer))
+            (process-put process 'key (car source))
+            (process-put process 'timeout (run-at-time 4 nil #'delete-process process))))
+      (error
+       (when input (ignore-errors (delete-file input)))
+       (when stderr (delete-process stderr))
+       (setq lcw-typst-block-preview--cache
+             (seq-take (cons (cons (car source) 'failed) lcw-typst-block-preview--cache) 12))))))
+
+(defun lcw-typst-block-preview--next ()
+  ;; One additional compiler for all visible Typst buffers.
+  (unless lcw-typst-block-preview--process
+    (walk-windows
+     (lambda (window)
+       (with-current-buffer (window-buffer window)
+         (when (and lcw-typst-block-preview-mode
+                    (not lcw-typst-block-preview--process))
+           (when-let* ((end (or (window-end window)
+                                (when (eql (window-start window)
+                                           (car lcw-typst-block-preview--view))
+                                  (cadr lcw-typst-block-preview--view))))
+                       (overlay
+                        (seq-find
+                         (lambda (entry)
+                           (and (= (overlay-get entry 'lcw-typst-tick)
+                                   (buffer-chars-modified-tick))
+                                (overlay-buffer entry)
+                                (< (window-start window) (overlay-end entry))
+                                (< (overlay-start entry) end)
+                                (not (lcw-typst-block-preview--contains-point-p
+                                      entry (window-point window)))
+                                (not (assoc (car (overlay-get entry 'lcw-typst-source))
+                                            lcw-typst-block-preview--cache))))
+                         lcw-typst-block-preview--overlays)))
+             (lcw-typst-block-preview--compile (overlay-get overlay 'lcw-typst-source))))))
+     'no-minibuf 'visible)))
+
+(defun lcw-typst-block-preview--refresh (buffer)
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (setq lcw-typst-block-preview--timer nil)
+      (when-let* ((lcw-typst-block-preview-mode)
+                  (window (get-buffer-window buffer 'visible))
+                  (beg (window-start window))
+                  (end (window-end window t))
+                  ((< beg end)))
+        (let* ((tick (buffer-chars-modified-tick))
+               (view (list beg end tick (max 1 (min 720 (window-body-width window t))))))
+          (unless (equal view lcw-typst-block-preview--view)
+            (setq lcw-typst-block-preview--view view)
+            (save-restriction
+              (widen)
+              (let* ((blocks
+                      (treesit-query-capture
+                       'typst
+                       (or lcw-typst-block-preview--block-query
+                           (setq lcw-typst-block-preview--block-query
+                                 (treesit-query-compile
+                                  'typst
+                                  '(((code (call item: (ident) @name)) @block
+                                     (:match "\\`\\(table\\|image\\|figure\\)\\'" @name))))))
+                       beg end))
+                     (directory (file-name-directory (or buffer-file-name default-directory)))
+                     (root (when blocks
+                             (or lcw-typst-block-preview--root
+                                 (setq lcw-typst-block-preview--root
+                                       (if-let* ((project (project-current nil directory)))
+                                           (file-name-as-directory (project-root project))
+                                         directory)))))
+                     (prelude
+                      (when blocks
+                        (treesit-query-capture
+                         'typst
+                         (or lcw-typst-block-preview--prelude-query
+                             (setq lcw-typst-block-preview--prelude-query
+                                   (treesit-query-compile 'typst '((code [(let) (import)]) @def))))
+                         (point-min) (min end (+ (point-min) 65536)) t)))
+                     (old lcw-typst-block-preview--overlays)
+                     (last-end 0)
+                     previews)
+                (dolist (capture blocks)
+                  (when (and (eq (car capture) 'block) (< (length previews) 8))
+                    (let* ((node (cdr capture))
+                           (start (treesit-node-start node))
+                           (stop (treesit-node-end node)))
+                      (when (and (>= start last-end)
+                                 (<= (- stop start) 16384)
+                                 (not (treesit-node-check node 'has-error))
+                                 (not (treesit-parent-until node "code")))
+                        (let ((source
+                               (concat
+                                (mapconcat
+                                 (lambda (definition)
+                                   (if (and (<= (treesit-node-end definition) start)
+                                            (<= (- (treesit-node-end definition)
+                                                   (treesit-node-start definition)) 4096)
+                                            (not (treesit-parent-until definition "code")))
+                                       (lcw-typst-block-preview--source definition directory root)
+                                     ""))
+                                 prelude "\n")
+                                "\n#set page(width: 400pt, height: auto, margin: 5pt)\n"
+                                (lcw-typst-block-preview--source node directory root))))
+                          (when (<= (string-bytes source) 24576)
+                            (let* ((key (secure-hash 'sha256 source))
+                                   (existing (seq-find
+                                              (lambda (overlay)
+                                                (and (eql start (overlay-start overlay))
+                                                     (eql stop (overlay-end overlay))
+                                                     (equal key (car (overlay-get overlay 'lcw-typst-source)))
+                                                     (= (nth 3 view) (overlay-get overlay 'lcw-typst-width))))
+                                              old))
+                                   (overlay (or existing (make-overlay start stop nil t nil))))
+                              (unless existing
+                                (overlay-put overlay 'priority 1)
+                                (overlay-put overlay 'evaporate t)
+                                (overlay-put overlay 'lcw-typst-width (nth 3 view))
+                                (overlay-put overlay 'lcw-typst-source (cons key source))
+                                (overlay-put overlay 'lcw-typst-image
+                                             (lcw-typst-block-preview--make-image
+                                              (cdr (assoc key lcw-typst-block-preview--cache)))))
+                              (overlay-put overlay 'lcw-typst-tick tick)
+                              (push overlay previews)
+                              (setq old (delq overlay old) last-end stop))))))))
+                (mapc #'lcw-typst-block-preview--forget-overlay old)
+                (setq lcw-typst-block-preview--overlays (nreverse previews))
+                (lcw-typst-block-preview--reveal))))
+          (lcw-typst-block-preview--next))))))
+
+(defun lcw-typst-block-preview--schedule (&rest _args)
+  (unless lcw-typst-block-preview--timer
+    (setq lcw-typst-block-preview--timer
+          (run-at-time 0.35 nil #'lcw-typst-block-preview--refresh (current-buffer)))))
+
+(defun lcw-typst-block-preview--changed (&rest _args)
+  (when lcw-typst-block-preview--timer
+    (cancel-timer lcw-typst-block-preview--timer)
+    (setq lcw-typst-block-preview--timer nil))
+  (lcw-typst-block-preview--schedule))
+
+(defun lcw-typst-block-preview--reveal ()
+  (let (editing)
+    (dolist (overlay lcw-typst-block-preview--overlays)
+      (when (overlay-buffer overlay)
+        (lcw-typst-block-preview--display overlay)
+        (when (lcw-typst-block-preview--contains-point-p overlay (point))
+          (setq editing overlay))))
+    (unless (eq editing lcw-typst-block-preview--editing)
+      (setq lcw-typst-block-preview--editing editing)
+      (lcw-typst-block-preview--next))))
+
+(defun lcw-typst-block-preview--clear ()
+  (when lcw-typst-block-preview--timer
+    (cancel-timer lcw-typst-block-preview--timer))
+  (mapc #'lcw-typst-block-preview--forget-overlay lcw-typst-block-preview--overlays)
+  (setq lcw-typst-block-preview--timer nil
+        lcw-typst-block-preview--overlays nil
+        lcw-typst-block-preview--view nil
+        lcw-typst-block-preview--cache nil
+        lcw-typst-block-preview--root nil
+        lcw-typst-block-preview--editing nil)
+  (when (and lcw-typst-block-preview--process
+             (eq (process-get lcw-typst-block-preview--process 'owner) (current-buffer)))
+    (process-put lcw-typst-block-preview--process 'cancelled t)
+    (delete-process lcw-typst-block-preview--process)))
+
+(defun lcw-typst-block-preview-refresh ()
+  "Rebuild Typst block previews, including files changed outside this buffer."
+  (interactive)
+  (when lcw-typst-block-preview-mode
+    (lcw-typst-block-preview--clear)
+    (lcw-typst-block-preview--schedule)))
+
+(define-minor-mode lcw-typst-block-preview-mode
+  "Preview visible Typst table, image, and figure calls in the source buffer."
+  :lighter nil
+  (let ((hooks '((after-change-functions . lcw-typst-block-preview--changed)
+                 (window-scroll-functions . lcw-typst-block-preview--schedule)
+                 (window-size-change-functions . lcw-typst-block-preview--schedule)
+                 (post-command-hook . lcw-typst-block-preview--reveal)
+                 (change-major-mode-hook . lcw-typst-block-preview--clear)
+                 (kill-buffer-hook . lcw-typst-block-preview--clear))))
+    (if lcw-typst-block-preview-mode
+        (if (and (derived-mode-p 'typst-ts-mode)
+                 (display-images-p) (image-type-available-p 'png)
+                 (executable-find "typst") (not (file-remote-p default-directory)))
+            (progn
+              (dolist (hook hooks)
+                (add-hook (car hook) (cdr hook) nil t))
+              (lcw-typst-block-preview--schedule))
+          (setq lcw-typst-block-preview-mode nil))
+      (dolist (hook hooks)
+        (remove-hook (car hook) (cdr hook) t))
+      (lcw-typst-block-preview--clear))))
+
+(add-hook 'typst-ts-mode-hook #'lcw-typst-block-preview-mode)
+
+(use-package typst-overlay
+  :if (locate-library "typst-overlay")
+  :commands typst-overlay-mode
+  :hook (typst-ts-mode . (lambda ()
+                           (when (and (display-images-p)
+                                      (image-type-available-p 'svg)
+                                      (executable-find "typst"))
+                             (typst-overlay-mode 1))))
+  :custom
+  (typst-overlay-preview nil)
+  (typst-overlay-max-active-compiles 2))
 
 ;; PDF Tools loads when a PDF is opened and never invokes a system package manager.
 (use-package pdf-tools

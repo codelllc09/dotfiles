@@ -58,7 +58,7 @@
 (defconst lcw-ide-packages
   '(vertico orderless marginalia consult corfu magit dirvish
     ;; dired-subtree  ; retired 2026-10: Dirvish ships its own subtree
-    vterm dape lua-mode pdf-tools
+    vterm dape lua-mode pdf-tools typst-ts-mode typst-overlay
     autothemer avy embark embark-consult yasnippet cape multiple-cursors
     paredit vlf agent-shell flymake-ruff diff-hl hl-todo)
   "Packages installed explicitly by `lcw-install-ide-packages'.")

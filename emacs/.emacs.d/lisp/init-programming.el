@@ -109,7 +109,8 @@
         (python "https://github.com/tree-sitter/tree-sitter-python" "v0.23.6")
         (javascript "https://github.com/tree-sitter/tree-sitter-javascript" "v0.23.1" "src")
         (typescript "https://github.com/tree-sitter/tree-sitter-typescript" "v0.23.2" "typescript/src")
-        (tsx "https://github.com/tree-sitter/tree-sitter-typescript" "v0.23.2" "tsx/src")))
+        (tsx "https://github.com/tree-sitter/tree-sitter-typescript" "v0.23.2" "tsx/src")
+        (typst "https://github.com/Ziqi-Yang/tree-sitter-typst")))
 
 (when (treesit-ready-p 'c t)
   (add-to-list 'major-mode-remap-alist '(c-mode . c-ts-mode)))

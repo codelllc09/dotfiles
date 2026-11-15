@@ -12,7 +12,7 @@
 
 (defconst lcw-doctor-optional-programs
   '("ruff" "pyright-langserver" "typescript-language-server"
-    "clangd" "lua-language-server" "codex-acp" "pi-acp")
+    "clangd" "lua-language-server" "typst" "codex-acp" "pi-acp")
   "Programs used by optional language and agent integrations.")
 
 (defun lcw-doctor--nearest-existing-directory (directory)
@@ -81,7 +81,7 @@
 
       (let ((missing-languages
              (seq-remove (lambda (language) (treesit-ready-p language t))
-                         '(c cpp python javascript typescript tsx))))
+                         '(c cpp python javascript typescript tsx typst))))
         (add (if missing-languages 'warn 'pass)
              "Tree-sitter grammars"
              (if missing-languages
