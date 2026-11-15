@@ -195,6 +195,139 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
         (dirvish--redisplay)))
     (message "Hidden files %s" (if show "shown" "hidden"))))
 
+(defun lcw-dirvish-fitting-prefix (text pixels)
+  "Return a glyph-aligned prefix of TEXT that fits in PIXELS."
+  (cond
+   ((<= pixels 0) "")
+   ((<= (string-pixel-width text) pixels) text)
+   (t
+    (let* ((offset 0)
+           (bounds (vconcat '(0) (mapcar (lambda (glyph) (cl-incf offset (length glyph)))
+                                        (string-glyph-split text))))
+           (low 0)
+           (high (1- (length bounds))))
+      (while (< low high)
+        (let ((middle (/ (+ low high 1) 2)))
+          (if (<= (string-pixel-width (substring text 0 (aref bounds middle))) pixels)
+              (setq low middle)
+            (setq high (1- middle)))))
+      ;; Keep CJK closing punctuation with the preceding glyph when possible.
+      (while (and (> low 1)
+                  (memq (aref text (aref bounds low))
+                        '(?， ?。 ?！ ?？ ?： ?； ?、 ?） ?】 ?》 ?」 ?』)))
+        (cl-decf low))
+      (substring text 0 (aref bounds low))))))
+
+(defconst lcw-dirvish-size-column-width 8
+  "Columns reserved for a size such as 1024 KiB.")
+
+(defun lcw-dirvish-file-size-iec (original size base)
+  "Format SIZE in IEC units when BASE indicates a byte count."
+  (if (= base 1024)
+      (string-pad (file-size-human-readable-iec size) lcw-dirvish-size-column-width nil t)
+    (funcall original size base)))
+
+(defun lcw-dirvish-remote-size-iec (original name attrs)
+  "Normalize the size field that Dirvish received from remote ls."
+  (if (and (dirvish-prop :remote) (not (dirvish-prop :sudo)))
+      (save-match-data
+        (let* ((size (file-attribute-size attrs))
+               (label
+                (cond
+                 ((natnump size) (file-size-human-readable-iec size))
+                 ((and (stringp size) (string-match-p "\\`[0-9]+\\'" size))
+                  (file-size-human-readable-iec (string-to-number size)))
+                 ((and (stringp size)
+                       (string-match "\\`\\([0-9]+\\(?:[.,][0-9]+\\)?\\)\\([kKMGTPEZYRQ]\\)\\'" size))
+                  (concat (match-string 1 size) " " (upcase (match-string 2 size)) "iB")))))
+          (if label
+              (string-pad label lcw-dirvish-size-column-width nil t)
+            (funcall original name attrs))))
+    (funcall original name attrs)))
+
+(defun lcw-dirvish-compact-column (renderer text)
+  "Fit the date and size strings from RENDERER into their display columns."
+  (pcase renderer
+    ('dirvish-attribute-file-time-rd
+     (if (string-prefix-p "  " text) (substring text 1 -1) text))
+    ('dirvish-attribute-file-size-rd
+     (let ((size (string-trim text)))
+       (concat (propertize (make-string (max 0 (- lcw-dirvish-size-column-width (string-width size))) ?\s)
+                           'face (get-text-property 0 'face text))
+               size)))
+    (_ text)))
+
+(defun lcw-dirvish-wrap-file-row (file-start file-end line-start line-end face left right)
+  "Render LEFT and RIGHT attributes around the filename in one Dirvish row."
+  (let* ((width (window-body-width nil t))
+         (indent (car (window-text-pixel-size nil line-start file-start t)))
+         (margin (frame-char-width))
+         (right-width (+ margin (string-pixel-width right)))
+         (show-right (and (not (string-empty-p right))
+                          (>= (- width indent right-width) (* 2 margin))))
+         (available (- width indent (if show-right right-width 0)))
+         (name (buffer-substring file-start (if (invisible-p file-end) file-end line-end)))
+         (prefix (lcw-dirvish-fitting-prefix name available))
+         (wrap (< (length prefix) (length name)))
+         (wrap-overlay (make-overlay line-start (1+ line-end))))
+    (overlay-put wrap-overlay 'wrap-prefix
+                 (propertize " " 'face face 'display
+                             `(space :width (,(min indent (/ width 2))))))
+    (let ((column
+           (when show-right
+             (concat (propertize " " 'face face 'display
+                                 `(space :align-to (- right-fringe (,right-width))))
+                     right
+                     ;; Fill the first display line so Emacs wraps the filename tail.
+                     (when wrap
+                       (propertize " " 'face face 'display
+                                   '(space :align-to (- right-fringe (2))))))))
+          (suffix
+           (unless (or wrap (string-empty-p left))
+             (lcw-dirvish-fitting-prefix left (- available (string-pixel-width name))))))
+      (let ((decoration (concat suffix column)))
+        (if (string-empty-p decoration)
+            (cons 'ov wrap-overlay)
+          (let* ((at (if wrap (+ file-start (length prefix)) line-end))
+                 (attributes (make-overlay at at)))
+            (overlay-put attributes 'after-string decoration)
+            (cons 'ovs (list wrap-overlay attributes))))))))
+
+(defun lcw-dirvish-wrap-file-rows (render height width pos remote fns align-to hl window-width)
+  "Wrap long filenames in graphical Dirvish listings with compact details."
+  (if (and (display-graphic-p) (derived-mode-p 'dired-mode)
+           (assq 'file-size (dirvish-prop :attrs)))
+      (progn
+        (setq-local truncate-lines (not dired-hide-details-mode)
+                    truncate-partial-width-windows nil)
+        (if (not dired-hide-details-mode)
+            (funcall render height width pos remote fns align-to hl window-width)
+          (unless (equal (assq 'continuation fringe-indicator-alist) '(continuation nil nil))
+            (setq-local fringe-indicator-alist
+                        (cons '(continuation nil nil) fringe-indicator-alist)))
+          ;; Keep Dirvish's row parsing and icon overlays. Collect its text
+          ;; attributes and place them after the icons establish the indent.
+          (let (left right)
+            (funcall
+             render height width pos remote
+             (append
+              (mapcar
+               (lambda (renderer)
+                 (lambda (&rest args)
+                   (let ((attribute (apply renderer args)))
+                     (pcase (car attribute)
+                       ('left (push (cdr attribute) left) nil)
+                       ('right (push (lcw-dirvish-compact-column renderer (cdr attribute)) right) nil)
+                       (_ attribute)))))
+               fns)
+              (list
+               (lambda (file-start file-end _name _path _attrs _type line-start line-end face _width)
+                 (prog1 (lcw-dirvish-wrap-file-row file-start file-end line-start line-end face
+                                                 (apply #'concat left) (apply #'concat right))
+                   (setq left nil right nil)))))
+             align-to hl window-width))))
+    (funcall render height width pos remote fns align-to hl window-width)))
+
 (use-package dirvish
   :if (locate-library "dirvish")
   :commands dirvish
@@ -252,6 +385,10 @@ Interactively, PROMPT-FOR-DIR is the prefix argument."
   (dirvish-mode-line-bar-image-width 0)
   :config
   (require 'dirvish-history)
+  (advice-add 'dirvish--render-attrs-1 :around #'lcw-dirvish-wrap-file-rows)
+  (with-eval-after-load 'dirvish-widgets
+    (advice-add 'dirvish--attr-size-human-readable :around #'lcw-dirvish-file-size-iec)
+    (advice-add 'dirvish--file-attr-size :around #'lcw-dirvish-remote-size-iec))
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-disable-legacy-icons)
   (add-hook 'dirvish-setup-hook #'lcw-dirvish-sync-listing-switches))
 
