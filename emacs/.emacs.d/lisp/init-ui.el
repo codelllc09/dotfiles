@@ -410,7 +410,7 @@ about keeping the rest of this function theme-synced."
                         :foreground bar-fg
                         :weight 'normal
                         :box `(:line-width (6 . 3) :color ,bar-bg)))
-  ;; Only the Agent Shell / vterm panel sets a header line now.
+  ;; Only the Agent Shell and Ghostel panels set a header line now.
   (set-face-attribute 'header-line nil
                       :inherit 'mode-line-inactive
                       :background "#181825"
@@ -485,8 +485,8 @@ about keeping the rest of this function theme-synced."
   (lcw-disable-tab-line-in-all-buffers))
 
 ;; The frame has no header line of its own: file identity now lives in
-;; the mode line (`lcw-mode-line-directory').  The Agent Shell / vterm
-;; panel still installs a buffer-local header line for its label.
+;; the mode line (`lcw-mode-line-directory').  The Agent Shell and Ghostel
+;; panels install their own buffer-local header lines.
 
 
 ;; Curated dark-theme lineup. C-c T previews themes through consult-theme;

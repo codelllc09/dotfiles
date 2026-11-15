@@ -4,6 +4,7 @@
 (require 'package)
 
 (declare-function treesit-ready-p "treesit.c")
+(defvar lcw-ghostel-module-directory)
 (require 'seq)
 (require 'tabulated-list)
 
@@ -89,16 +90,18 @@
                          (mapconcat #'symbol-name missing-languages ", "))
                "all configured grammars are ready")))
 
-      (let ((module
-             (and (boundp 'module-file-suffix)
-                  (locate-file (concat "vterm-module" module-file-suffix)
-                               load-path))))
-        (add (if (and (locate-library "vterm") module) 'pass 'warn)
-             "Vterm"
+      (let* ((installed (locate-library "ghostel"))
+             (module (and module-file-suffix
+                          (expand-file-name (concat "ghostel-module" module-file-suffix)
+                                            lcw-ghostel-module-directory)))
+             (ready (and installed module (file-readable-p module))))
+        (add (if ready 'pass 'warn)
+             "Ghostel"
              (cond
-              ((not (locate-library "vterm")) "package is missing")
-              (module (format "module: %s" (abbreviate-file-name module)))
-              (t "package exists but its native module was not found"))))
+              ((not installed) "package is missing")
+              ((not module) "Emacs lacks native module support")
+              (ready (format "module: %s" (abbreviate-file-name module)))
+              (t "module missing; run M-x ghostel-download-module"))))
 
       (if (display-graphic-p)
           (dolist (font '("Maple Mono NF CN" "Symbols Nerd Font Mono"))

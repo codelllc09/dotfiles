@@ -1,8 +1,13 @@
-;;; init-terminal.el --- Project terminal panel (Vterm) -*- lexical-binding: t; -*-
+;;; init-terminal.el --- Project terminal panel (Ghostel) -*- lexical-binding: t; -*-
 
 (declare-function lcw-project-root-or-default "init-project.el")
+(declare-function ghostel-create "ghostel" (&optional name display identity))
 
-;; A per-project Vterm side panel toggled with C-x w t.  The panel helpers
+(defconst lcw-ghostel-module-directory
+  (expand-file-name "state/ghostel/" user-emacs-directory)
+  "Directory for Ghostel's native module across package updates.")
+
+;; A per-project Ghostel side panel toggled with C-x w t.  The panel helpers
 ;; are terminal-only today; if another panel kind ever appears, move them to
 ;; a shared module.  Runtime dependencies by load order: init-project for
 ;; `lcw-project-root-or-default', init-ui for the
@@ -47,14 +52,15 @@ Place a new panel on SIDE using SIZE as its width or height."
       (set-window-scroll-bars window nil nil nil nil t))
     window))
 
-(use-package vterm
-  :if (locate-library "vterm")
-  :commands vterm-mode
+(use-package ghostel
+  :if (locate-library "ghostel")
+  :commands (ghostel ghostel-create)
   :custom
-  (vterm-max-scrollback 10000)
-  (vterm-kill-buffer-on-exit t))
+  (ghostel-module-directory lcw-ghostel-module-directory)
+  (ghostel-max-scrollback (* 10 1024 1024))
+  (ghostel-kill-buffer-on-exit t))
 
-(defun lcw-vterm-process-environment ()
+(defun lcw-terminal-process-environment ()
   "Return an environment without inherited WezTerm-only integration flags."
   (seq-remove
    (lambda (entry)
@@ -62,12 +68,12 @@ Place a new panel on SIDE using SIZE as its width or height."
       "\\`\\(?:WEZTERM_[^=]*\\|TERM_PROGRAM\\(?:_VERSION\\)?\\)=" entry))
    process-environment))
 
-(defun lcw-vterm-header-line ()
-  "Return the contextual header used by the bottom Vterm panel."
+(defun lcw-terminal-header-line ()
+  "Return the contextual header used by the bottom Ghostel panel."
   (list
    " "
    (propertize
-    (format "%s VTERM  %s"
+    (format "%s GHOSTEL  %s"
             (if (fboundp 'nerd-icons-codicon)
                 (substring-no-properties
                  (nerd-icons-codicon "nf-cod-terminal"))
@@ -77,34 +83,37 @@ Place a new panel on SIDE using SIZE as its width or height."
    mode-line-format-right-align
    (propertize "C-x w t  close " 'face 'lcw-terminal-header-hint)))
 
-(defun lcw-project-vterm-buffer (root)
-  "Return a live Vterm buffer rooted at ROOT."
-  (require 'vterm)
+(defun lcw-project-ghostel-buffer (root)
+  "Return the live Ghostel buffer for ROOT, starting a shell if needed."
+  (unless (require 'ghostel nil t)
+    (user-error "Ghostel is missing. Run M-x lcw-install-ide-packages"))
   (let* ((project-name
           (file-name-nondirectory (directory-file-name root)))
          (terminal-name
-          (format "*vterm:%s-%s*" project-name
+          (format "*ghostel:%s-%s*" project-name
                   (substring (secure-hash 'sha1 root) 0 7)))
          (buffer (get-buffer terminal-name)))
     (unless (and (buffer-live-p buffer)
                  (process-live-p (get-buffer-process buffer)))
       (when (buffer-live-p buffer)
         (kill-buffer buffer))
-      (setq buffer (get-buffer-create terminal-name))
+      (let ((default-directory root)
+            (process-environment (lcw-terminal-process-environment)))
+        (setq buffer (ghostel-create terminal-name)))
       (with-current-buffer buffer
-        (setq default-directory root)
-        (let ((process-environment (lcw-vterm-process-environment)))
-          (vterm-mode))
         (setq-local vertical-scroll-bar nil
                     horizontal-scroll-bar nil
-                    header-line-format '((:eval (lcw-vterm-header-line))))))
+                    header-line-format '((:eval (lcw-terminal-header-line))))))
     buffer))
 
 (defun lcw-toggle-terminal-panel ()
-  "Open, focus, or close a Vterm panel for the current project."
+  "Open, focus, or close a Ghostel panel for the current project."
   (interactive)
-  (let ((root (lcw-project-root-or-default)))
-    (lcw-toggle-panel 'terminal root (lcw-project-vterm-buffer root)
+  (let* ((window (selected-window))
+         (root (or (and (eq (window-parameter window 'lcw-panel) 'terminal)
+                        (window-parameter window 'lcw-panel-root))
+                   (lcw-project-root-or-default))))
+    (lcw-toggle-panel 'terminal root (lcw-project-ghostel-buffer root)
                       'bottom 0.30)))
 
 (keymap-set window-prefix-map "t" #'lcw-toggle-terminal-panel)

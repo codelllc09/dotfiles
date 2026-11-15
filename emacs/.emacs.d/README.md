@@ -461,20 +461,16 @@ TAB 展開子樹、M-f/M-b 翻歷史、? 打開功能面板。C-x C-f 保持 min
 |---|---|
 | C-x d | 全屏 Dirvish（C-u 先提示目錄） |
 | C-x w f | 左側 Dirvish 檔案樹（dirvish-side，自動跟隨當前檔案） |
-| C-x w t | 單獨顯示／收起下方專案 vterm 終端 |
+| C-x w t | 單獨顯示／收起下方專案 Ghostel 終端 |
 | C-x w a | 顯示／收起目前選定的 agent |
 | C-x w A | 從已安裝的 Codex、Pi、Copilot CLI 中選擇 agent |
 | C-x w s | Emacs 原生命令：暫藏／恢復全部側窗 |
 | C-x o | 在可見視窗之間循環 |
 
-各專案的終端 buffer 相互獨立；切換或收起側窗不會終止程序。下方
-vterm 可直接執行測試、建置或 yazi；Yazi 是終端檔案管理器，不是
-終端後端。
+各專案有獨立的 Ghostel buffer，切換或收起側窗會保留程序。
+首次安裝套件後可用 M-x ghostel-download-module 安裝原生模組。
 
 目前偵測到 Codex 與 Pi；預設 agent 是 Codex。C-x w A 切換到 Pi 時，
 Codex 程序會留在自己的隱藏 buffer，下次切回可繼續原會話，反之亦然。
 配置也識別官方 GitHub Copilot CLI 的 copilot 命令；安裝完成後會自動
 出現在選單。這些終端 agent 與 Codex 桌面應用中的目前對話不是同一會話。
-
-目前沒有額外安裝終端或 AI 套件。若日後加入 vterm，只需更換側窗的
-終端後端；佈局與 C-x w 快捷鍵可以保持不變。
