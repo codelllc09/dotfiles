@@ -108,6 +108,7 @@
                   init-terminal
                   init-agent
                   init-programming
+                  init-ime
                   init-doctor))
   (require module))
 

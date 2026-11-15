@@ -7,6 +7,7 @@
 
 - `init.el`：套件來源、可重建工具路徑與模組載入順序。
 - `lisp/init-minibuffer.el`：Vertico、Orderless、Marginalia、Consult、Embark、Avy。
+- `lisp/init-ime.el`：按命令前綴時，讓 Fcitx 5 切回英文直輸。
 - `lisp/init-editing.el`：一般編輯、Corfu、Cape、snippet、多游標、Markdown、PDF。
 - `lisp/init-ui.el`：Header Line、工作區 Tab Bar、字體、主題與圖標。
 - `lisp/init-project.el`：project.el、Dired、Magit、工作區保存與 IDE 側邊面板。
