@@ -7,9 +7,39 @@
   :config
   (keymap-global-set "C-c p" project-prefix-map))
 
+(defvar magit-insert-section--current)
+
+(defun lcw-magit-indent-status-section ()
+  "Indent entries below the top-level headings in Magit status."
+  (let* ((section magit-insert-section--current)
+         (parent (oref section parent)))
+    (when (and parent (oref parent parent))
+      (add-text-properties (oref section start) (point)
+                           '(line-prefix "  " wrap-prefix "  ")))))
+
+(defun lcw-magit-setup-status ()
+  "Set up indentation and a shortcut guide for Magit status."
+  (add-hook 'magit-insert-section-hook #'lcw-magit-indent-status-section nil t)
+  (setq-local header-line-format
+              (concat "  "
+                      (mapconcat
+                       (lambda (hint)
+                         (concat (propertize (car hint) 'face 'bold)
+                                 " " (cdr hint)))
+                       '(("?" . "Commands")
+                         ("TAB" . "Toggle section")
+                         ("s" . "Stage")
+                         ("u" . "Unstage")
+                         ("c" . "Commit")
+                         ("g" . "Refresh"))
+                       "   "))))
+
 (use-package magit
   :if (locate-library "magit")
-  :bind (("C-c g" . magit-status)))
+  :bind (("C-c g" . magit-status))
+  :hook (magit-status-mode . lcw-magit-setup-status)
+  :custom
+  (magit-diff-refine-hunk t))
 
 (defun lcw-enable-diff-hl-maybe ()
   "Show Git line changes for local version-controlled files."
