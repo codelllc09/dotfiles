@@ -65,8 +65,9 @@ The cheap size test avoids hashing during ordinary insertion and deletion."
 
 (defun lcw-enable-content-restore-check ()
   "Enable saved-content comparison after edits in the current buffer."
-  (add-hook 'after-change-functions
-            #'lcw-clear-modified-if-content-restored nil t))
+  (when buffer-file-name
+    (add-hook 'after-change-functions
+              #'lcw-clear-modified-if-content-restored nil t)))
 
 (defun lcw-disable-content-restore-check ()
   "Disable saved-content comparison after edits in the current buffer."
@@ -105,8 +106,10 @@ reloads; remote buffers establish their baseline when opened or saved."
       (lcw-enable-content-restore-check))))
 
 (add-hook 'find-file-hook #'lcw-record-saved-content 95)
+(add-hook 'find-file-hook #'lcw-enable-content-restore-check 96)
 (add-hook 'after-save-hook #'lcw-record-saved-content 95)
 (add-hook 'after-revert-hook #'lcw-record-saved-content 95)
+(add-hook 'after-revert-hook #'lcw-enable-content-restore-check 96)
 
 ;; Reloading this module should fix existing local buffers immediately without
 ;; opening a network connection for currently modified TRAMP buffers.
