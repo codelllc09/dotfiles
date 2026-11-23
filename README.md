@@ -12,13 +12,15 @@
 
 在倉庫根目錄執行 `./install.sh` 會依目前的 Niri 或 GNOME 工作階段選擇配置。新機、TTY 或 SSH 中可直接指定桌面。先安裝該桌面所需的軟體，腳本負責連結設定檔。
 
-| 命令 | 部署的設定包 |
-|---|---|
-| `./install.sh niri` | `kitty`、`niri`、`noctalia` |
-| `./install.sh gnome` | `kitty`、`gnome`、`vicinae` |
-| `./install.sh all` | 兩套桌面，加上 `bash`、`emacs`、`kde`（Dolphin）、`nvim`、`yazi` |
+每個模式都會部署 kitty、Bash、Emacs、Dolphin（`kde`）、Neovim 和 Yazi 的設定。
 
-兩套桌面共用 kitty。切換參數只會補上所選配置，會保留先前部署的另一套桌面。若只想加裝個別工具，安裝 GNU Stow 後可執行 `stow --no-folding -t "$HOME" nvim`，將 `nvim` 換成所需的包名。[GNU Stow 手冊](https://www.gnu.org/software/stow/manual/html_node/Invoking-Stow.html)
+| 命令 | 額外部署的桌面設定 |
+|---|---|
+| `./install.sh niri` | `niri`、`noctalia` |
+| `./install.sh gnome` | `gnome`、`vicinae` |
+| `./install.sh all` | 上述兩套桌面的設定 |
+
+切換參數只會補上所選配置，會保留先前部署的另一套桌面。若只想加裝個別工具，安裝 GNU Stow 後可執行 `stow --no-folding -t "$HOME" nvim`，將 `nvim` 換成所需的包名。[GNU Stow 手冊](https://www.gnu.org/software/stow/manual/html_node/Invoking-Stow.html)
 
 ## Niri 與 Noctalia
 
@@ -82,19 +84,19 @@ dconf dump /org/gnome/shell/extensions/astra-monitor/ > ~/dotfiles/gnome/.config
 
 ### Dolphin 外觀與升級檢查
 
-選用 Dolphin 時，`kde` 包提供 Papirus-Dark 圖示設定及 `dolphinrc`。在 GNOME 執行 `~/.local/bin/dolphin-gnome-restore`，為 Qt 的 Breeze 圖示主題建立影子主題，將四個視窗按鈕換成 Adwaita 圖示。缺少 Papirus 時腳本會提示安裝方式。重開 Dolphin 生效，還原用 `~/.local/bin/dolphin-gnome-restore --uninstall`。[外觀恢復腳本](kde/.local/bin/dolphin-gnome-restore)
+兩套桌面共用 `kde` 包的 Papirus-Dark 圖示設定及 `dolphinrc`。GNOME 模式另附外觀恢復腳本。執行 `~/.local/bin/dolphin-gnome-restore`，為 Qt 的 Breeze 圖示主題建立影子主題，將四個視窗按鈕換成 Adwaita 圖示。缺少 Papirus 時腳本會提示安裝方式。重開 Dolphin 生效，還原用 `~/.local/bin/dolphin-gnome-restore --uninstall`。[外觀恢復腳本](kde/.local/bin/dolphin-gnome-restore)
 
 - Fedora 或 GNOME 大版本升級後，重跑外觀腳本並確認 Dolphin 的最小化、最大化與關閉按鈕。
 - Fedora 大版本升級後，修改 ibus-rime 設定前先執行 `rime_deployer --sync` 同步詞庫。
 
 ## 共用與按需工具
 
-以下是本機使用過的版本，可按需部署。Fedora 44（核心 6.19.6-300.fc44）基線記於 2026-09-04，11-07 補記 Dolphin，11-24 核對桌面與 kitty。
+以下是共用工具與選用依賴的本機版本。Fedora 44（核心 6.19.6-300.fc44）基線記於 2026-09-04，11-07 補記 Dolphin，11-24 核對桌面與 kitty。
 
 | 組件 | 版本 |
 |---|---|
 | 終端 | kitty 0.50.0，使用 `splits` 佈局與自訂分頁列。[快捷鍵與工作區](kitty/.config/kitty/README.md) |
-| Bash 行編輯器 | ble.sh 0.4 nightly（由 `./install.sh all` 安裝至 XDG data 目錄） |
+| Bash 行編輯器 | ble.sh 0.4 nightly（由 `install.sh` 安裝至 XDG data 目錄） |
 | 編輯器 | GNU Emacs 30.2（原生 package.el + use-package 模組化配置） |
 | 編輯器／文檔閱讀 | Neovim 0.12.5（Markdown、Typst、LaTeX 預覽及 Codex 側欄，插件由內建 vim.pack 管理） |
 | 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底；斜體楷體用 LXGW WenKai Mono（GitHub lxgw/LxgwWenKai v1.530，手動下載至 ~/.local/share/fonts，不入庫） |
@@ -142,11 +144,11 @@ ffmpegthumbnailer（視頻首幀）由 dnf 安裝，不入庫；插件本體在
 ### Bash
 
 Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；实际配置
-位于 `~/.config/bash/`。命令历史属于 state，`./install.sh all` 会在目标尚不存在时
+位于 `~/.config/bash/`。命令历史属于 state，`install.sh` 会在目标尚不存在时
 将 `~/.bash_history` 一次性迁到 `${XDG_STATE_HOME:-~/.local/state}/bash/history`，
 不会把历史提交进仓库。
 
-ble.sh 的程式檔屬於外部依賴，不進 dotfiles；`./install.sh all` 會在尚未安裝時從
+ble.sh 的程式檔屬於外部依賴，不進 dotfiles；`install.sh` 會在尚未安裝時從
 官方 nightly release 下載至 `${XDG_DATA_HOME:-~/.local/share}/blesh`，重跑時保留
 既有安裝。下載需要 `curl`、`tar` 與 `xz`。fzf、zoxide、Starship 仍由系統或
 各自安裝器管理；缺少時部署腳本會提示，對應 Bash 模組則靜默跳過。

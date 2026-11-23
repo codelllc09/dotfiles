@@ -5,9 +5,10 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 用法：./install.sh [niri|gnome|all]
-  niri   部署 kitty、niri、noctalia
-  gnome  部署 kitty、gnome、vicinae
-  all    部署两套桌面，以及 bash、emacs、kde、nvim、yazi
+各模式均部署 kitty、Bash、Emacs、Dolphin（kde）、Neovim、Yazi 的配置。
+  niri   加上 niri、noctalia
+  gnome  加上 gnome、vicinae
+  all    加上两套桌面的配置
 省略参数时识别当前桌面，无法识别时请明确指定。
 EOF
 }
@@ -34,11 +35,11 @@ fi
 
 niri_packages=(niri noctalia)
 gnome_packages=(gnome vicinae)
-packages=(kitty)
+packages=(kitty bash emacs kde nvim yazi)
 case "$profile" in
   niri)  packages+=("${niri_packages[@]}") ;;
   gnome) packages+=("${gnome_packages[@]}") ;;
-  all)   packages+=("${niri_packages[@]}" "${gnome_packages[@]}" bash emacs kde nvim yazi) ;;
+  all)   packages+=("${niri_packages[@]}" "${gnome_packages[@]}") ;;
   -h|--help) usage; exit 0 ;;
   *) usage >&2; exit 2 ;;
 esac
@@ -101,6 +102,9 @@ report_optional_shell_tools() {
 echo "部署 $profile 配置：${packages[*]}"
 for pkg in "${packages[@]}"; do
   find "$pkg" -type f -print0 | while IFS= read -r -d '' f; do
+    if [[ $profile == niri && $f == kde/.local/bin/dolphin-gnome-restore ]]; then
+      continue
+    fi
     src="$repo_root/$f"
     dst="$HOME/${f#"$pkg"/}"
     mkdir -p -- "$(dirname -- "$dst")"
@@ -122,21 +126,21 @@ if [[ $profile == all ]]; then
     unlink "$legacy_wezterm"
     echo "移除旧链接: $legacy_wezterm"
   fi
-
-  # Bash 历史是 state，不进入 dotfiles。首次部署时把传统路径迁到
-  # XDG_STATE_HOME；若两边都存在则不自动合并，避免覆盖历史。
-  bash_state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
-  bash_state_dir="$bash_state_home/bash"
-  legacy_bash_history="$HOME/.bash_history"
-  xdg_bash_history="$bash_state_dir/history"
-  mkdir -p "$bash_state_dir"
-  if [ -f "$legacy_bash_history" ] && [ ! -e "$xdg_bash_history" ]; then
-    mv "$legacy_bash_history" "$xdg_bash_history"
-    echo "迁移 Bash 历史: $legacy_bash_history -> $xdg_bash_history"
-  elif [ -f "$legacy_bash_history" ] && [ -e "$xdg_bash_history" ]; then
-    echo "保留旧 Bash 历史（XDG 目标已存在，请手动合并）: $legacy_bash_history"
-  fi
-
-  install_blesh
-  report_optional_shell_tools
 fi
+
+# Bash 历史是 state，不进入 dotfiles。首次部署时把传统路径迁到
+# XDG_STATE_HOME；若两边都存在则不自动合并，避免覆盖历史。
+bash_state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+bash_state_dir="$bash_state_home/bash"
+legacy_bash_history="$HOME/.bash_history"
+xdg_bash_history="$bash_state_dir/history"
+mkdir -p "$bash_state_dir"
+if [ -f "$legacy_bash_history" ] && [ ! -e "$xdg_bash_history" ]; then
+  mv "$legacy_bash_history" "$xdg_bash_history"
+  echo "迁移 Bash 历史: $legacy_bash_history -> $xdg_bash_history"
+elif [ -f "$legacy_bash_history" ] && [ -e "$xdg_bash_history" ]; then
+  echo "保留旧 Bash 历史（XDG 目标已存在，请手动合并）: $legacy_bash_history"
+fi
+
+install_blesh
+report_optional_shell_tools
