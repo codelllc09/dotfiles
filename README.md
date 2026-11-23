@@ -15,7 +15,7 @@
 | 終端 | wezterm **20260901 nightly**（非 distro 稳定版，坑位记录见 agent_monitor.lua 档头） |
 | Bash 行編輯器 | ble.sh 0.4 nightly（由 `install.sh` 安裝至 XDG data 目錄） |
 | 編輯器 | GNU Emacs 30.2（原生 package.el + use-package 模組化配置） |
-| 文檔器 | Neovim 0.12.5（render-markdown 閱讀 + mini 六模塊；插件由內置 vim.pack 首啓自動下載） |
+| 編輯器／文檔閱讀 | Neovim 0.12.5（Markdown、Typst、LaTeX 預覽及 Codex 側欄，插件由內建 vim.pack 管理） |
 | 輸入法 | ibus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
 | 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底；斜體楷體用 LXGW WenKai Mono（GitHub lxgw/LxgwWenKai v1.530，手動下載至 ~/.local/share/fonts，不入庫） |
 | 文件管理器 | yazi 26.9.1（插件由 ya pkg 管理）+ swayimg 5.6 / ffmpegthumbnailer 2.3（dnf；畫廊式看圖與視頻首幀） |
@@ -41,13 +41,15 @@
 ## Niri 與 Noctalia
 
 `niri` 管理 `config.kdl`，`noctalia` 管理頂欄、`panel-status` 插件與屏保腳本。
-部署可用 `stow niri noctalia`（在倉庫根目錄執行），或沿用 `install.sh`。
+從倉庫根目錄執行 `stow niri noctalia kitty kde`，或沿用 `install.sh`。
 部署後執行 `systemctl --user enable noctalia.service fcitx5-niri.service`。
 Fcitx 5 的自啟與 D-Bus 按需啟動皆限於 Niri。
 Niri 預設以 Papers 開 PDF、以 Loupe 開 PNG 和 JPEG。`Super+Shift+Y` 匯入剪貼簿圖片進行標註。
+本機使用 Niri 26.04 與 kitty 0.50.0，按 `Super+T` 開啟終端。Niri、KDE 與 XDG 的預設終端均設為 kitty，FileManager1 的 D-Bus 請求由 Dolphin 處理。Niri 登入時也會啟動 KDE Connect 指示器。[kitty 分屏、工作區與快捷鍵](kitty/.config/kitty/README.md)
 Noctalia GUI 的調整存於 `~/.local/state/noctalia/settings.toml`，同名設定以該檔為準。
 
-新機需安裝 Niri、Noctalia、Fcitx 5 Rime、mpv 與 wl-clipboard。屏保素材放在 `~/Videos/screensaver.mp4`。
+新機需安裝 Niri、Noctalia、Fcitx 5 Rime 與 wl-clipboard。泡泡屏保使用 GJS、GTK 3 layer-shell 和 GStreamer（Matroska、VP8、gtkwaylandsink），循環素材為 `~/Videos/bubbles-loop.webm`。
+閒置 10 分鐘後播放，移動滑鼠、點擊或按鍵即可退出。重建素材需要 NumPy、Pillow 與支援 libvpx 的 FFmpeg。[影片生成器](noctalia/.local/share/bubble-screensaver/render.py)
 中英文指示需用 C 編譯器、pkg-config 和 GLib 開發檔（Fedora 的 `gcc`、`pkgconf-pkg-config`、`glib2-devel`）重建：
 
 ```bash
@@ -55,6 +57,19 @@ mkdir -p ~/.local/libexec
 cc -O2 ~/.local/share/noctalia/plugins/panel-status/fcitx-mode.c \
   $(pkg-config --cflags --libs gio-2.0) -o ~/.local/libexec/waybar-fcitx-mode
 ```
+
+## Neovim 使用指南
+
+在程式碼中選取文字，依次按 **空格、a、a** 即可帶著選區開啟 Codex 側欄，`Ctrl+s` 送出，`空格 at` 收起或展開。新機需備妥已登入的 Codex CLI 和 `codex-acp`。[Agentic 指南](nvim/.config/nvim/agentic.nvim.help.md)
+
+Markdown 用 render-markdown，Typst 用 Markview。Kitty 中的 Snacks 可行內顯示公式與 Mermaid 圖，分別需要對應的排版工具（`typst`、`pdflatex` 或 `tectonic`）及 `mmdc`。[Typst 測試文件](nvim/tests/typst-hybrid.typ) · [LaTeX 測試文件](nvim/tests/latex-hybrid.tex)
+
+| 要做什麼 | 使用指南 |
+|---|---|
+| 找檔案、搜尋內容、編輯程式碼 | [Snacks](nvim/.config/nvim/snacks.nvim.help.md) · [mini.nvim](nvim/.config/nvim/mini.nvim.help.md) |
+| 查看改動、暫存與提交 | [Gitsigns](nvim/.config/nvim/gitsigns.nvim.help.md) · [Neogit](nvim/.config/nvim/neogit.help.md) |
+| 閱讀 Markdown、預覽 Typst | [render-markdown](nvim/.config/nvim/render-markdown.nvim.help.md) · [Markview](nvim/.config/nvim/markview.nvim.help.md) |
+| 查快捷鍵、摺疊程式碼、看狀態欄 | [which-key](nvim/.config/nvim/which-key.nvim.help.md) · [Treesitter](nvim/.config/nvim/nvim-treesitter.help.md) · [lualine](nvim/.config/nvim/lualine.nvim.help.md) |
 
 ## 佈局
 
@@ -70,6 +85,10 @@ wezterm/
   .config/wezterm/quick_select.lua    → QuickSelect 模式表 + DIY 掃描選擇器
   .config/wezterm/compose.lua         → 中文組字緩衝窗鍵位與啟動邏輯
   .config/wezterm/composer.sh         → 中文組字緩衝窗編輯與回填腳本
+
+kitty/
+  .config/kitty/kitty.conf            → 分屏、快捷鍵、分頁列與窗格狀態監視
+  .config/kitty/README.md             → kitty 與 WezTerm 操作對照
 
 bash/
   .bash_profile                       → ~/.bash_profile（Bash 固定的登录入口）
@@ -97,8 +116,10 @@ emacs/
   .emacs.d/tools/                     → Node/Python 工具的可重建版本清單
 
 nvim/
-  .config/nvim/init.lua               → ~/.config/nvim/init.lua（文檔查看器定位，全部配置）
-  .config/nvim/nvim-pack-lock.json    → vim.pack 插件版本鎖（4 個插件釘 rev，新機首啓自動下載同版本）
+  .config/nvim/init.lua               → 編輯、文檔預覽、Git 與 Codex 側欄配置
+  .config/nvim/nvim-pack-lock.json    → vim.pack 鎖定的 10 個插件版本
+  .config/nvim/*.help.md              → 各插件的本機快捷鍵與使用指南
+  tests/                              → Typst 與 LaTeX 混合預覽測試文件
 
 yazi/
   .config/yazi/keymap.toml            → 增量鍵位：<C-t> 開 swayimg 縮略圖畫廊、T 預覽最大化、+/- 預覽縮放
@@ -135,14 +156,6 @@ Tree-sitter grammar、工具虛擬環境及會話資料仍留在 `~/.emacs.d/`�
 ```bash
 emacs --batch -Q --load ~/.emacs.d/init.el --eval '(message "Emacs config OK")'
 ```
-
-Neovim 定位是「文檔查看器 + 輕量編輯器」：render-markdown（==螢光筆高亮、
-代碼塊/行內代碼分色，配 Catppuccin Mocha 色板）+ snacks image 模塊
-（WezTerm 不支持 unicode 佔位符，僅懸浮窗預覽：`\i`）+ mini.nvim
-（files/pick/icons/pairs/surround/trailspace 六模塊）+ nvim-treesitter
-（只爲安裝 json/yaml parser，markdown 系隨 nvim 自帶）。高亮/摺疊用
-0.11+ 內置引擎（`vim.treesitter.start()`），無舊式 setup({highlight})。
-驗證：`nvim --headless +'lua print(type(MiniPick))' +qa` 輸出 table 即配置健全。
 
 Yazi 看圖走兩條路：終端內快速預覽（T 最大化後 j/k 上下張、+/- 縮放，官方
 toggle-pane/zoom 插件）；GUI 式體驗按 <C-t> 開 swayimg 畫廊（PgDn/PgUp 翻頁、
