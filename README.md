@@ -1,50 +1,42 @@
 # dotfiles
 
-桌面預設終端為 kitty。從倉庫根目錄執行 `./install.sh` 部署全部設定，或安裝 GNU Stow 後執行 `stow kitty` 單獨部署終端設定。
+## 選擇桌面
 
-## 已驗證環境快照
+| 功能 | Niri 26.04（Noctalia） | GNOME Shell 50.4（Mutter） |
+|---|---|---|
+| 啟動器 | `Super+D` 開 Noctalia | `Super+R` 開 Vicinae 0.29.2 |
+| 剪貼簿歷史 | `Super+Y` 開 Noctalia | `Ctrl+Alt+V` 開 Vicinae |
+| 截圖與標註 | `Print` 互動截圖、`Ctrl+Print` 全螢幕、`Alt+Print` 目前視窗。`Super+Shift+Y` 用 Noctalia 標註剪貼簿圖片 | `Ctrl+Print` 選區，截圖後進入 Gradia 1.14.0 |
+| 頂欄監控 | Noctalia 顯示 CPU、記憶體與網速 | GNOME Shell 擴充套件 Astra Monitor v43 |
+| 中文輸入 | Fcitx 5 + Rime | IBus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
 
-基線記錄於 2026-09-04，11-07 補記 Dolphin，11-24 核對 kitty 與 Niri。
+兩套桌面的預設終端都是 kitty。新機先安裝所選桌面的軟體與 GNU Stow，再從倉庫根目錄執行對應的命令。`--no-folding` 會逐檔建立連結，家目錄中的設定目錄可繼續存放其他檔案。[GNU Stow 手冊](https://www.gnu.org/software/stow/manual/html_node/Invoking-Stow.html)
 
-| 組件 | 版本 |
+| 部署範圍 | 命令 |
 |---|---|
-| 發行版 | Fedora 44 (Forty Four)，內核 6.19.6-300.fc44 |
-| 桌面 | Niri 26.04（Wayland），另有 GNOME Shell 50.4（Mutter）配置 |
-| 終端 | kitty 0.50.0，使用 `splits` 佈局與自訂分頁列。[快捷鍵與工作區](kitty/.config/kitty/README.md) |
-| Bash 行編輯器 | ble.sh 0.4 nightly（由 `install.sh` 安裝至 XDG data 目錄） |
-| 編輯器 | GNU Emacs 30.2（原生 package.el + use-package 模組化配置） |
-| 編輯器／文檔閱讀 | Neovim 0.12.5（Markdown、Typst、LaTeX 預覽及 Codex 側欄，插件由內建 vim.pack 管理） |
-| 輸入法 | Niri 使用 Fcitx 5 + Rime，GNOME 使用 ibus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
-| 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底；斜體楷體用 LXGW WenKai Mono（GitHub lxgw/LxgwWenKai v1.530，手動下載至 ~/.local/share/fonts，不入庫） |
-| 文件管理器 | yazi 26.9.1（插件由 ya pkg 管理）+ swayimg 5.6 / ffmpegthumbnailer 2.3（dnf；畫廊式看圖與視頻首幀） |
-| 檔案管理器（GUI） | Dolphin 26.08.1（Qt 6.11 / KF6；GNOME 風格：Papirus-Dark 圖示 + Adwaita 視窗按鈕，見 kde 段） |
-| 啟動器 | vicinae 0.29.2（Terra 倉庫；Wayland 熱鍵走 GNOME 自定義快捷鍵，見 vicinae 段） |
-| 截圖標註 | Gradia 1.14.0（Flathub；`Ctrl+Print` 走 GNOME 自定義快捷鍵，截圖後自動進入標註） |
-| 頂欄監控 | GNOME Shell 擴展 Astra Monitor v43（EGO 62；配置經 dconf 入庫，見 gnome 段） |
+| Niri | `stow --no-folding -t "$HOME" niri noctalia kitty` |
+| GNOME | `stow --no-folding -t "$HOME" gnome vicinae kitty` |
+| 任一桌面選用 Dolphin | `stow --no-folding -t "$HOME" kde` |
+| 任一桌面選用 Bash、Emacs、Neovim 或 Yazi | 從 `bash emacs nvim yazi` 選取，例如 `stow --no-folding -t "$HOME" nvim` |
 
-### 升級後檢查清單
-
-1. 在 Niri 按 `Super+T` 開啟 kitty，按 `Ctrl+Shift+F6` 查看實際載入的配置。用 `Ctrl+Shift+Enter` 向右分割、`Ctrl+Shift+E` 向下分割。
-2. 在窗格內啟動受監視的 agent，確認分頁列顯示狀態。每個 kitty 程序的快照預設寫在 `~/.local/state/kitty-herd/current.<pid>.json`，狀態轉換記錄在同目錄下的 `transitions.jsonl`。設定了 `XDG_STATE_HOME` 時，以該目錄為準。
-3. 在 kitty 切換 Rime 中英文模式，確認分頁列徽章與游標顏色跟著改變。
-4. Fedora 大版本升級後：ibus-rime 的 userdb 建議先 `rime_deployer --sync`
-   再動配置，避免詞庫損傷
-5. Fedora/GNOME 大版本升級後：重跑 `~/.local/bin/dolphin-gnome-restore`，
-   開 Dolphin 確認視窗按鈕仍是 – □ ✕（Adwaita 圖示路徑可能搬家）
+需要倉庫內全部設定時才執行 `./install.sh`。腳本會遍歷所有包，並在缺少 ble.sh 時用 `curl`、`tar`、`xz` 安裝。
 
 ## Niri 與 Noctalia
 
-`niri` 管理 `config.kdl`，`noctalia` 管理頂欄、`panel-status` 插件與屏保腳本。
-從倉庫根目錄執行 `stow niri noctalia kitty kde`，或沿用 `install.sh`。
-部署後執行 `systemctl --user enable noctalia.service fcitx5-niri.service`。
-Fcitx 5 的自啟與 D-Bus 按需啟動皆限於 Niri。
-Niri 預設以 Papers 開 PDF、以 Loupe 開 PNG 和 JPEG。`Super+Shift+Y` 匯入剪貼簿圖片進行標註。
-Niri、KDE 與 XDG 終端選擇器均預設使用 kitty。FileManager1 的 D-Bus 請求由 Dolphin 處理。Niri 登入時也會啟動 KDE Connect 指示器。
-Noctalia GUI 的調整存於 `~/.local/state/noctalia/settings.toml`，同名設定以該檔為準。
+安裝 Niri、Noctalia、kitty、Fcitx 5 及其 Rime 引擎。剪貼簿圖片標註另用 wl-clipboard 的 `wl-paste`。連結設定後執行以下命令，兩個服務會在下次登入 Niri 時啟動。
 
-新機需安裝 Niri、Noctalia、kitty、Fcitx 5 Rime 與 wl-clipboard。泡泡屏保使用 GJS、GTK 3 layer-shell 和 GStreamer（Matroska、VP8、gtkwaylandsink），循環素材為 `~/Videos/bubbles-loop.webm`。
-閒置 10 分鐘後播放，移動滑鼠、點擊或按鍵即可退出。重建素材需要 NumPy、Pillow 與支援 libvpx 的 FFmpeg。[影片生成器](noctalia/.local/share/bubble-screensaver/render.py)
-中英文指示需用 C 編譯器、pkg-config 和 GLib 開發檔（Fedora 的 `gcc`、`pkgconf-pkg-config`、`glib2-devel`）重建：
+```bash
+systemctl --user daemon-reload
+systemctl --user enable noctalia.service fcitx5-niri.service
+```
+
+- `Super+T` 開 kitty，`Super+S` 開控制中心，`Super+N` 看通知，`Super+Alt+L` 用 swaylock 鎖屏。[Niri 快捷鍵](niri/.config/niri/config.kdl)
+- Niri 用 Papers 開 PDF、Loupe 開 PNG 和 JPEG。登入時啟動 KDE Connect 指示器。[預設應用](niri/.config/niri-mimeapps.list)
+- Noctalia 的頂欄與閒置動作由 `noctalia` 包管理。GUI 修改寫入 `~/.local/state/noctalia/settings.toml`，同名設定以該檔為準。[Noctalia 設定](noctalia/.config/noctalia/config.toml)
+
+閒置 10 分鐘後播放 `~/Videos/bubbles-loop.webm`，移動滑鼠、點擊或按鍵即可退出。泡泡屏保依賴 GJS、GTK 3 layer-shell 和 GStreamer（Matroska、VP8、gtkwaylandsink）。重建影片才需要 NumPy、Pillow 和支援 libvpx 的 FFmpeg。[影片生成器](noctalia/.local/share/bubble-screensaver/render.py)
+
+頂欄的中英文指示器需用 C 編譯器、pkg-config 和 GLib 開發檔重建。Fedora 對應套件為 `gcc`、`pkgconf-pkg-config`、`glib2-devel`。
 
 ```bash
 mkdir -p ~/.local/libexec
@@ -52,7 +44,71 @@ cc -O2 ~/.local/share/noctalia/plugins/panel-status/fcitx-mode.c \
   $(pkg-config --cflags --libs gio-2.0) -o ~/.local/libexec/waybar-fcitx-mode
 ```
 
-## Neovim 使用指南
+## GNOME Shell
+
+### 啟動器、剪貼簿與截圖
+
+安裝 Vicinae（Terra）後，在 GNOME 工作階段執行以下命令。恢復腳本會從 Flathub 補裝 Gradia，並將 GNOME 自訂快捷鍵清單設為上表的三項（`custom0` 至 `custom2`）。[快捷鍵恢復腳本](gnome/.local/bin/gnome-shortcuts-restore)
+
+```bash
+~/.local/bin/gnome-shortcuts-restore
+systemctl --user enable --now vicinae.service
+```
+
+同一帳號也用 Niri 時，Fedora 的 `vicinae.service` 預設跟隨 `graphical-session.target`。本機在 `~/.config/systemd/user/vicinae.service.d/override.conf` 加入以下條件以跳過 Niri。此檔需另行配置，更動後執行 `systemctl --user daemon-reload`。
+
+```ini
+[Unit]
+ConditionEnvironment=!XDG_CURRENT_DESKTOP=niri
+```
+
+Vicinae 的剪貼簿與視窗切換透過 GNOME Shell 擴充套件 `vicinae@dagimg-dot` 存取。安裝後登出再登入，在 Extensions 啟用。
+
+```bash
+curl -sL -o /tmp/vicinae-ext.zip 'https://github.com/vicinaehq/gnome-extension/releases/latest/download/vicinae%40dagimg-dot.shell-extension.zip' \
+  && gnome-extensions install --force /tmp/vicinae-ext.zip
+```
+
+GNOME 50 的自訂快捷鍵 `binding` 使用字串（如 `'<Super>r'`）。腳本命令位於 `~/.local/share/vicinae/scripts/`。Vicinae 的 `settings.json` 透過 `imports` 載入 `dotfiles.json`，GUI 存檔會原子替換 `settings.json`，其中的值優先。剪貼簿、索引與主題由應用管理。新機從商店重裝 Process Manager、Systemd、Kill Port。
+
+### 頂欄監控
+
+Astra Monitor（`monitor@astraext.github.io`，快照 v43 / EGO 62）顯示 CPU 與磁碟 I/O 的 20 px 曲線，以及記憶體百分比。執行 `~/.local/bin/astra-monitor-restore` 安裝擴充套件並匯入 dconf。首次安裝若未啟用，登出再登入後重跑。修改設定後可回存快照。
+
+```bash
+dconf dump /org/gnome/shell/extensions/astra-monitor/ > ~/dotfiles/gnome/.config/gnome-extensions/astra-monitor.dconf
+```
+
+記憶體剩餘低於 1.5 GB 時圖示變紅。在 CPU 選單懸停 User/System 可看 I/O wait，持續高於 5% 時可進一步排查磁碟 I/O。[Astra Monitor 設定](gnome/.config/gnome-extensions/astra-monitor.dconf)
+
+### Dolphin 外觀與升級檢查
+
+選用 Dolphin 時，`kde` 包提供 Papirus-Dark 圖示設定及 `dolphinrc`。在 GNOME 執行 `~/.local/bin/dolphin-gnome-restore`，為 Qt 的 Breeze 圖示主題建立影子主題，將四個視窗按鈕換成 Adwaita 圖示。缺少 Papirus 時腳本會提示安裝方式。重開 Dolphin 生效，還原用 `~/.local/bin/dolphin-gnome-restore --uninstall`。[外觀恢復腳本](kde/.local/bin/dolphin-gnome-restore)
+
+- Fedora 或 GNOME 大版本升級後，重跑外觀腳本並確認 Dolphin 的最小化、最大化與關閉按鈕。
+- Fedora 大版本升級後，修改 ibus-rime 設定前先執行 `rime_deployer --sync` 同步詞庫。
+
+## 共用與按需工具
+
+以下是本機使用過的版本，可按需部署。Fedora 44（核心 6.19.6-300.fc44）基線記於 2026-09-04，11-07 補記 Dolphin，11-24 核對桌面與 kitty。
+
+| 組件 | 版本 |
+|---|---|
+| 終端 | kitty 0.50.0，使用 `splits` 佈局與自訂分頁列。[快捷鍵與工作區](kitty/.config/kitty/README.md) |
+| Bash 行編輯器 | ble.sh 0.4 nightly（由 `install.sh` 安裝至 XDG data 目錄） |
+| 編輯器 | GNU Emacs 30.2（原生 package.el + use-package 模組化配置） |
+| 編輯器／文檔閱讀 | Neovim 0.12.5（Markdown、Typst、LaTeX 預覽及 Codex 側欄，插件由內建 vim.pack 管理） |
+| 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底；斜體楷體用 LXGW WenKai Mono（GitHub lxgw/LxgwWenKai v1.530，手動下載至 ~/.local/share/fonts，不入庫） |
+| 文件管理器 | yazi 26.9.1（插件由 ya pkg 管理）+ swayimg 5.6 / ffmpegthumbnailer 2.3（dnf；畫廊式看圖與視頻首幀） |
+| 圖形檔案管理器 | Dolphin 26.08.1（Qt 6.11 / KF6）。`kde` 包讓 Dolphin 處理 FileManager1 的 D-Bus 請求，並指定 kitty 為 KDE 終端。 |
+
+### kitty 升級後檢查
+
+1. 在 kitty 按 `Ctrl+Shift+F6` 查看載入的設定，用 `Ctrl+Shift+Enter` 向右分割、`Ctrl+Shift+E` 向下分割。
+2. 在窗格內啟動受監視的 agent，確認分頁列顯示狀態。每個 kitty 程序的快照預設寫在 `~/.local/state/kitty-herd/current.<pid>.json`，狀態轉換記錄在同目錄下的 `transitions.jsonl`。設定了 `XDG_STATE_HOME` 時，以該目錄為準。
+3. 在 kitty 切換 Rime 中英文模式，確認分頁列徽章與游標顏色跟著改變。
+
+### Neovim 使用指南
 
 在程式碼中選取文字，依次按 **空格、a、a** 即可帶著選區開啟 Codex 側欄，`Ctrl+s` 送出，`空格 at` 收起或展開。新機需備妥已登入的 Codex CLI 和 `codex-acp`。[Agentic 指南](nvim/.config/nvim/agentic.nvim.help.md)
 
@@ -65,9 +121,44 @@ Markdown 用 render-markdown，Typst 用 Markview。Kitty 中的 Snacks 可行�
 | 閱讀 Markdown、預覽 Typst | [render-markdown](nvim/.config/nvim/render-markdown.nvim.help.md) · [Markview](nvim/.config/nvim/markview.nvim.help.md) |
 | 查快捷鍵、摺疊程式碼、看狀態欄 | [which-key](nvim/.config/nvim/which-key.nvim.help.md) · [Treesitter](nvim/.config/nvim/nvim-treesitter.help.md) · [lualine](nvim/.config/nvim/lualine.nvim.help.md) |
 
+### Emacs
+
+Emacs 配置按主責拆分，每個套件只由一個模組擁有；套件下載、原生編譯、
+Tree-sitter grammar、工具虛擬環境及會話資料仍留在 `~/.emacs.d/`，不進倉庫。
+修改後可用以下命令驗證完整啟動：
+
+```bash
+emacs --batch -Q --load ~/.emacs.d/init.el --eval '(message "Emacs config OK")'
+```
+
+### Yazi
+
+Yazi 看圖走兩條路：終端內快速預覽（T 最大化後 j/k 上下張、+/- 縮放，官方
+toggle-pane/zoom 插件）；GUI 式體驗按 <C-t> 開 swayimg 畫廊（PgDn/PgUp 翻頁、
+縮放保留、方向鍵/拖動平移、Enter 畫廊↔單圖、Esc 回 yazi）。swayimg 與
+ffmpegthumbnailer（視頻首幀）由 dnf 安裝，不入庫；插件本體在
+~/.config/yazi/plugins 由 ya pkg 下載，清單記於 package.toml，新機先裝 yazi
+再 `ya pkg install` 復原。
+
+### Bash
+
+Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；实际配置
+位于 `~/.config/bash/`。命令历史属于 state，部署脚本会在目标尚不存在时
+将 `~/.bash_history` 一次性迁到 `${XDG_STATE_HOME:-~/.local/state}/bash/history`，
+不会把历史提交进仓库。
+
+ble.sh 的程式檔屬於外部依賴，不進 dotfiles；`install.sh` 會在尚未安裝時從
+官方 nightly release 下載至 `${XDG_DATA_HOME:-~/.local/share}/blesh`，重跑時保留
+既有安裝。下載需要 `curl`、`tar` 與 `xz`。fzf、zoxide、Starship 仍由系統或
+各自安裝器管理；缺少時部署腳本會提示，對應 Bash 模組則靜默跳過。
+
+### Dolphin
+
+KConfig 會沿軟連結寫回 `kdeglobals` 和 `dolphinrc`。`Version` 與 `ViewPropsTimestamp` 會由 Dolphin 自動更新，提交前用 `git diff` 確認變更。
+
 ## 佈局
 
-每個工具一個「包」目錄，內部結構 = 家目錄相對路徑：
+每個設定包內的路徑都相對於家目錄。
 
 ```
 kitty/
@@ -116,6 +207,16 @@ yazi/
   .config/yazi/yazi.toml              → 預覽尺寸上限 2000×2000（zoom 插件放大不被截斷）
   .config/yazi/package.toml           → ya pkg 插件清單（toggle-pane/zoom/thumbnail），新機 ya pkg install 復原
 
+niri/
+  .config/niri/config.kdl             → Niri 快捷鍵、視窗規則與啟動項
+  .config/niri-mimeapps.list          → Niri 的預設應用
+  .config/systemd/user/fcitx5-niri.service → Niri 工作階段的輸入法
+
+noctalia/
+  .config/noctalia/config.toml        → Niri 的頂欄與閒置動作
+  .local/share/noctalia/plugins/panel-status/ → 輸入狀態與網速
+  .local/bin/screensaver              → 閒置時播放泡泡屏保
+
 vicinae/
   .config/vicinae/dotfiles.json       → 我們的基礎配置（遙測關/緊湊模式/無時鐘），經 settings.json 的 imports 引入
   .local/share/vicinae/scripts/       → 腳本命令：\gh/\bili/\tr 網搜（反斜杠前綴避免搶排名）（@vicinae.* 註解式，percentEncoded）
@@ -126,110 +227,16 @@ gnome/
   .local/bin/astra-monitor-restore             → 一鍵恢復：裝擴展 → dconf load → 啓用（冪等）
 
 kde/
-  .config/kdeglobals                  → KDE 全域設定：`[Icons] Theme=Papirus-Dark`（KConfig 寫入會跟隨軟鏈，見下文）
+  .config/kdeglobals                  → KDE 全域設定：`[Icons] Theme=Papirus-Dark`（KConfig 寫入會跟隨軟鏈）
   .config/dolphinrc                   → Dolphin 設定（MenuBar=Disabled 等；`Version`/`ViewPropsTimestamp` 是 KDE 會更新的 state 值）
   .local/bin/dolphin-gnome-restore    → 產生 GNOME 視窗按鈕用的 breeze 影子主題（冪等；`--uninstall` 還原）
 ```
 
-Emacs 配置按主責拆分，每個套件只由一個模組擁有；套件下載、原生編譯、
-Tree-sitter grammar、工具虛擬環境及會話資料仍留在 `~/.emacs.d/`，不進倉庫。
-修改後可用以下命令驗證完整啟動：
-
-```bash
-emacs --batch -Q --load ~/.emacs.d/init.el --eval '(message "Emacs config OK")'
-```
-
-Yazi 看圖走兩條路：終端內快速預覽（T 最大化後 j/k 上下張、+/- 縮放，官方
-toggle-pane/zoom 插件）；GUI 式體驗按 <C-t> 開 swayimg 畫廊（PgDn/PgUp 翻頁、
-縮放保留、方向鍵/拖動平移、Enter 畫廊↔單圖、Esc 回 yazi）。swayimg 與
-ffmpegthumbnailer（視頻首幀）由 dnf 安裝，不入庫；插件本體在
-~/.config/yazi/plugins 由 ya pkg 下載，清單記於 package.toml，新機先裝 yazi
-再 `ya pkg install` 復原。
-
-Vicinae 是 GNOME Wayland 下的原生 C++/Qt 啟動器（Super+R 呼出，替代
-Super 概覽，視頻會議投屏不暴露已開窗口）。**Wayland 坑位**：普通應用不允許
-全局抓鍵，熱鍵由 GNOME 自定義快捷鍵承擔（Super+R → `vicinae toggle`），
-駐留走 systemd user service，配套 GNOME Shell 擴展（vicinae@dagimg-dot）
-經 D-Bus 暴露剪貼板與窗口管理（wm:switch-windows 等）。服務與擴展不落文件；
-Vicinae 與 Gradia 的 GNOME 自定義快捷鍵由下列命令聲明，新機恢復：
-
-```bash
-~/.local/bin/gnome-shortcuts-restore
-systemctl --user enable --now vicinae.service
-curl -sL -o /tmp/vicinae-ext.zip 'https://github.com/vicinaehq/gnome-extension/releases/latest/download/vicinae%40dagimg-dot.shell-extension.zip' \
-  && gnome-extensions install --force /tmp/vicinae-ext.zip  # 裝完註銷重登，在 Extensions 應用啟用
-```
-
-`gnome-shortcuts-restore` 會在缺少時從 Flathub 安裝 Gradia，並以 custom0/custom1
-恢復兩個快捷鍵。Gradia 是截圖後編輯器：`Ctrl+Print` 先打開 GNOME 交互式選區，
-完成截圖後自動進入 Gradia 標註。應用本體由 Flathub 管理，不進倉庫。
-
-另注意 GNOME 50 起 custom-keybinding 的 `binding` 鍵已改**純字符串**
-（`'<Super>r'`），寫舊數組格式 `"['<Super>r']"` 時 g-s-d 會把字面量整個
-傳給 Mutter 並**靜默**抓取失敗（僅 journal 可見 `not a valid accelerator`）。
-腳本命令在 `~/.local/share/vicinae/scripts/`（由本倉庫 symlink 管理，索引器跟軟鏈）。
-**配置文件分工**：GUI 保存設置時會用「臨時文件+原子替換」整個重寫
-`settings.json`（軟鏈會被替換成真文件——實測踩過），故本倉庫只管
-dotfiles.json 並在 settings.json 的 imports 數組引入（官方推薦模式）；
-GUI 改的值落在 settings.json 且優先級高於 imports。主題在 GUI 裏選。
-vicinae.db／剪貼板庫／文件索引／主題／snippets 屬 state，不入庫。
-商店擴展同屬 state（~/.local/share/vicinae/extensions/），但已裝清單在此登記，
-新機從 store 重裝：**Process Manager、Systemd、Kill Port**（2026-10-29 裝）。
-
-頂欄監控用 GNOME Shell 擴展 **Astra Monitor**（`monitor@astraext.github.io`）。
-配置不在文件而在 dconf 數據庫，倉庫只存非默認鍵快照
-（`gnome/.config/gnome-extensions/astra-monitor.dconf`，`dconf dump` 產物）。
-佈局取「緊湊」取向：CPU 圖標+20px 曲線、內存百分比（剩餘 <1.5GB 圖標變紅告警）、
-磁盤 IO 速度+20px 曲線；GPU/傳感器/網絡模塊關閉，各實時條關閉。
-新機恢復：`~/.local/bin/astra-monitor-restore`（裝擴展 → dconf load → 啓用；
-首次安裝需註銷重登讓 Shell 掃描）。改了擴展設置後同步倉庫：
-`dconf dump /org/gnome/shell/extensions/astra-monitor/ > ~/dotfiles/gnome/.config/gnome-extensions/astra-monitor.dconf`
-。查 iowait：點頂欄 CPU 區開菜單，懸停 User/System 行彈出
-「CPU Category Usage Raw Info」，I/O wait 持續 >5% 即 IO 瓶頸信號。
-
-Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；实际配置
-位于 `~/.config/bash/`。命令历史属于 state，部署脚本会在目标尚不存在时
-将 `~/.bash_history` 一次性迁到 `${XDG_STATE_HOME:-~/.local/state}/bash/history`，
-不会把历史提交进仓库。
-
-ble.sh 的程式檔屬於外部依賴，不進 dotfiles；`install.sh` 會在尚未安裝時從
-官方 nightly release 下載至 `${XDG_DATA_HOME:-~/.local/share}/blesh`，重跑時保留
-既有安裝。下載需要 `curl`、`tar` 與 `xz`。fzf、zoxide、Starship 仍由系統或
-各自安裝器管理；缺少時部署腳本會提示，對應 Bash 模組則靜默跳過。
-（剪貼板歷史已改由 Vicinae 承擔，終端外 Ctrl+Alt+V 打開；GPaste/gsel 已退役。）
-
-Dolphin 是 GNOME 桌面上的 KDE 檔案管理器（Dolphin 26.08.1 / Qt 6.11 / KF6）。
-Fedora 44 的 Qt 在 GNOME 下會自動採用 GTK3 平台主題（字型、深色配色、游標）與
-Adwaita 視窗裝飾，所以真正不一致的只剩圖示與視窗按鈕符號。處理分兩層：
-
-- **文字設定**入 `kdeglobals`（`[Icons] Theme=Papirus-Dark`）與 `dolphinrc`
-  （`[MainWindow] MenuBar=Disabled` 等），由 `install.sh` symlink 部署。
-  KConfig 保存設定時（`kwriteconfig6` 對兩個檔案實測）會**跟隨**軟鏈寫入目標，
-  不會像 Electron 類 GUI 用「臨時檔+原子替換」把軟鏈換成真文件。若哪天發現
-  設定檔變成真文件，把真文件 mv 回 `kde/.config/` 再跑 `install.sh` 即可。
-  `dolphinrc` 的 `Version`/`ViewPropsTimestamp` 由 Dolphin 自動更新，屬 state；
-  提交前 `git diff` 確認，只提交有意義的設定變更。
-- **非文字資源**由 `~/.local/bin/dolphin-gnome-restore` 重建（冪等）：
-  1. 檢查 Papirus 圖示主題：`sudo dnf install papirus-icon-theme papirus-icon-theme-dark`，
-     或手動放到 `~/.local/share/icons/`；主題本體約 400MB，**不入庫**；
-  2. 在 `~/.local/share/icons/breeze` 建一個 breeze **影子主題**（152KB）：所有目錄
-     symlink 回系統 Breeze，只把 4 個 `window-{minimize,maximize,restore,close}-symbolic.svg`
-     覆寫成 Adwaita（GNOME）的 – □ ✕。原因是 Qt 的 Adwaita 窗框外掛按鈕符號取自
-     Qt 圖示主題 `breeze`，而 Breeze 的 window-*-symbolic 是 chevron（⌄ ⌃）；
-     另 `adwaita-qt6` 已不建議（Fedora 44 無套件、上游年久失修）。
-
-新機恢復：`~/.local/bin/dolphin-gnome-restore`（Papirus 缺會提示 dnf 指令），重開 Dolphin 生效。
-同步方式：改圖示/按鈕後 `git -C ~/dotfiles status` 確認 `kde/.config/kdeglobals` 變更；
-影子主題屬產生檔，不入庫。還原按鈕：`~/.local/bin/dolphin-gnome-restore --uninstall`。
-
 ## 日常
 
-- **編輯**：直接改 live 路徑或倉庫路徑都一樣（同一個檔案），改完即生效
-- **提交**：`cd ~/dotfiles && git add -A && git commit`
-- **新機器（Linux）**：安裝 `curl`、`tar`、`xz` 後，執行
-  `git clone … ~/dotfiles && ~/dotfiles/install.sh`；腳本會部署連結並安裝 ble.sh
-- **新增工具**：`mkdir rime && mv ~/.config/ibus/rime/* rime/` 之類，
-  再跑 `./install.sh`（記得加 .gitignore 排除執行期產物）
+- 直接修改已連結的設定檔，再用 `git -C ~/dotfiles status` 查看改動。
+- 新增工具時，依家目錄的相對路徑建立設定包，從倉庫根目錄用 Stow 連結該包。
+- 提交用 `cd ~/dotfiles && git add -A && git commit`。
 
 ## 原則
 
