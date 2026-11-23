@@ -1,22 +1,20 @@
 # dotfiles
 
-單一真相倉庫 + symlink 農場。佈局相容 GNU Stow（`sudo dnf install stow`
-後可用 `stow wezterm` 取代 install.sh）。
+桌面預設終端為 kitty。從倉庫根目錄執行 `./install.sh` 部署全部設定，或安裝 GNU Stow 後執行 `stow kitty` 單獨部署終端設定。
 
-## 已驗證環境快照（2026-09-04；2026-11-07 追加 Dolphin）
+## 已驗證環境快照
 
-本倉庫配置與下列版本深度耦合（尤其 wezterm nightly 和 rime 自癒邏輯），
-跨發行版/跨大版本**不保證可用**，系統大版本升級後請按下方清單驗收：
+基線記錄於 2026-09-04，11-07 補記 Dolphin，11-24 核對 kitty 與 Niri。
 
 | 組件 | 版本 |
 |---|---|
 | 發行版 | Fedora 44 (Forty Four)，內核 6.19.6-300.fc44 |
-| 桌面 | GNOME Shell 50.4 · Wayland（mutter） |
-| 終端 | wezterm **20260901 nightly**（非 distro 稳定版，坑位记录见 agent_monitor.lua 档头） |
+| 桌面 | Niri 26.04（Wayland），另有 GNOME Shell 50.4（Mutter）配置 |
+| 終端 | kitty 0.50.0，使用 `splits` 佈局與自訂分頁列。[快捷鍵與工作區](kitty/.config/kitty/README.md) |
 | Bash 行編輯器 | ble.sh 0.4 nightly（由 `install.sh` 安裝至 XDG data 目錄） |
 | 編輯器 | GNU Emacs 30.2（原生 package.el + use-package 模組化配置） |
 | 編輯器／文檔閱讀 | Neovim 0.12.5（Markdown、Typst、LaTeX 預覽及 Codex 側欄，插件由內建 vim.pack 管理） |
-| 輸入法 | ibus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
+| 輸入法 | Niri 使用 Fcitx 5 + Rime，GNOME 使用 ibus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
 | 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底；斜體楷體用 LXGW WenKai Mono（GitHub lxgw/LxgwWenKai v1.530，手動下載至 ~/.local/share/fonts，不入庫） |
 | 文件管理器 | yazi 26.9.1（插件由 ya pkg 管理）+ swayimg 5.6 / ffmpegthumbnailer 2.3（dnf；畫廊式看圖與視頻首幀） |
 | 檔案管理器（GUI） | Dolphin 26.08.1（Qt 6.11 / KF6；GNOME 風格：Papirus-Dark 圖示 + Adwaita 視窗按鈕，見 kde 段） |
@@ -26,13 +24,9 @@
 
 ### 升級後檢查清單
 
-1. `wezterm show-keys | grep Split` 有輸出 → 配置載入正常（含 require agent_monitor）
-2. `tail /tmp/herd-debug.log` 有新 `setup` → agent_monitor 模塊真加載了
-   （路徑保留 herd- 前綴；注意 `Configuration Error` 為零不代表模塊在跑——
-   pcall 靜默降級會裝沒事，認 setup 留痕）
-3. 中英切換時游標色跟隨 → rime 自癒（ime_heal）還適用；
-   **注意**：ime_heal 的實測環境寫在 rime.lua 該段註解裏
-   （gnome-shell/mutter/ibus 版本敏感），升級後若行爲異常先看那裏
+1. 在 Niri 按 `Super+T` 開啟 kitty，按 `Ctrl+Shift+F6` 查看實際載入的配置。用 `Ctrl+Shift+Enter` 向右分割、`Ctrl+Shift+E` 向下分割。
+2. 在窗格內啟動受監視的 agent，確認分頁列顯示狀態。每個 kitty 程序的快照預設寫在 `~/.local/state/kitty-herd/current.<pid>.json`，狀態轉換記錄在同目錄下的 `transitions.jsonl`。設定了 `XDG_STATE_HOME` 時，以該目錄為準。
+3. 在 kitty 切換 Rime 中英文模式，確認分頁列徽章與游標顏色跟著改變。
 4. Fedora 大版本升級後：ibus-rime 的 userdb 建議先 `rime_deployer --sync`
    再動配置，避免詞庫損傷
 5. Fedora/GNOME 大版本升級後：重跑 `~/.local/bin/dolphin-gnome-restore`，
@@ -45,10 +39,10 @@
 部署後執行 `systemctl --user enable noctalia.service fcitx5-niri.service`。
 Fcitx 5 的自啟與 D-Bus 按需啟動皆限於 Niri。
 Niri 預設以 Papers 開 PDF、以 Loupe 開 PNG 和 JPEG。`Super+Shift+Y` 匯入剪貼簿圖片進行標註。
-本機使用 Niri 26.04 與 kitty 0.50.0，按 `Super+T` 開啟終端。Niri、KDE 與 XDG 的預設終端均設為 kitty，FileManager1 的 D-Bus 請求由 Dolphin 處理。Niri 登入時也會啟動 KDE Connect 指示器。[kitty 分屏、工作區與快捷鍵](kitty/.config/kitty/README.md)
+Niri、KDE 與 XDG 終端選擇器均預設使用 kitty。FileManager1 的 D-Bus 請求由 Dolphin 處理。Niri 登入時也會啟動 KDE Connect 指示器。
 Noctalia GUI 的調整存於 `~/.local/state/noctalia/settings.toml`，同名設定以該檔為準。
 
-新機需安裝 Niri、Noctalia、Fcitx 5 Rime 與 wl-clipboard。泡泡屏保使用 GJS、GTK 3 layer-shell 和 GStreamer（Matroska、VP8、gtkwaylandsink），循環素材為 `~/Videos/bubbles-loop.webm`。
+新機需安裝 Niri、Noctalia、kitty、Fcitx 5 Rime 與 wl-clipboard。泡泡屏保使用 GJS、GTK 3 layer-shell 和 GStreamer（Matroska、VP8、gtkwaylandsink），循環素材為 `~/Videos/bubbles-loop.webm`。
 閒置 10 分鐘後播放，移動滑鼠、點擊或按鍵即可退出。重建素材需要 NumPy、Pillow 與支援 libvpx 的 FFmpeg。[影片生成器](noctalia/.local/share/bubble-screensaver/render.py)
 中英文指示需用 C 編譯器、pkg-config 和 GLib 開發檔（Fedora 的 `gcc`、`pkgconf-pkg-config`、`glib2-devel`）重建：
 
@@ -76,19 +70,15 @@ Markdown 用 render-markdown，Typst 用 Markview。Kitty 中的 Snacks 可行�
 每個工具一個「包」目錄，內部結構 = 家目錄相對路徑：
 
 ```
-wezterm/
-  .config/wezterm/wezterm.lua         → ~/.config/wezterm/wezterm.lua（XDG 主配置：組裝+鍵位）
-  .config/wezterm/agent_monitor.lua   → coding agent 狀態監視（前 herd.lua；運行時路徑仍 herd- 前綴）
-  .config/wezterm/pane_layout.lua     → 窗格分屏佈局碼（幾何→唯一碼→象形字）
-  .config/wezterm/app_icon.lua        → TABn 程序圖標（APP_ICON 表 + 三層歸一化查表）
-  .config/wezterm/rime.lua            → Rime 聯動（徽章/游標色/IME 自癒）
-  .config/wezterm/quick_select.lua    → QuickSelect 模式表 + DIY 掃描選擇器
-  .config/wezterm/compose.lua         → 中文組字緩衝窗鍵位與啟動邏輯
-  .config/wezterm/composer.sh         → 中文組字緩衝窗編輯與回填腳本
-
 kitty/
-  .config/kitty/kitty.conf            → 分屏、快捷鍵、分頁列與窗格狀態監視
-  .config/kitty/README.md             → kitty 與 WezTerm 操作對照
+  .config/kitty/kitty.conf            → 字型、分屏、快捷鍵及啟動會話
+  .config/kitty/tab_bar.py            → 自訂分頁列
+  .config/kitty/terminal_watcher.py   → 輸入法狀態與游標顏色
+  .config/kitty/agent_monitor.py      → agent 狀態、未讀數與通知
+  .config/kitty/workflow_keys.py      → 工作區選單、中文草稿窗與窗格移動
+  .config/kitty/README.md             → 操作指南與遷移鍵位對照
+  .config/environment.d/60-default-terminal.conf → 設定 TERMINAL=kitty
+  .config/xdg-terminals.list          → XDG 預設終端 kitty.desktop
 
 bash/
   .bash_profile                       → ~/.bash_profile（Bash 固定的登录入口）
@@ -139,14 +129,6 @@ kde/
   .config/kdeglobals                  → KDE 全域設定：`[Icons] Theme=Papirus-Dark`（KConfig 寫入會跟隨軟鏈，見下文）
   .config/dolphinrc                   → Dolphin 設定（MenuBar=Disabled 等；`Version`/`ViewPropsTimestamp` 是 KDE 會更新的 state 值）
   .local/bin/dolphin-gnome-restore    → 產生 GNOME 視窗按鈕用的 breeze 影子主題（冪等；`--uninstall` 還原）
-```
-
-v4 模塊化（2026-09-04）：原 476 行單文件按功能拆成上述模塊（教訓：單文件
-改一處可能碰壞全局）。各模塊 pcall 引入，壞了只丟對應功能。**改完配置的
-可信驗證**（`wezterm cli list` 是假陽性——GUI 活著時只查 server 不 eval）：
-
-```bash
-WEZTERM_UNIX_SOCKET=/tmp/chk.sock WEZTERM_LOG=warn wezterm start -e true
 ```
 
 Emacs 配置按主責拆分，每個套件只由一個模組擁有；套件下載、原生編譯、
