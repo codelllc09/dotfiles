@@ -1,10 +1,10 @@
 -- Neovim 配置索引
 -- 搜索 @ 加章节或小节名可直达对应标题。
 --   core        基础选项、文件自动重读、输入法
---   documents   Markdown、Snacks、PDF 文本阅读
+--   documents   Markdown、Typst、LaTeX、Snacks、PDF 文本阅读
 --   editing     mini.nvim、快捷键提示、文件和文本导航
 --   git         Neogit、状态页缩进、Gitsigns
---   avante      Codex ACP 对话
+--   agentic     Codex ACP 对话
 --   statusline  lualine 主题与布局
 --   languages   Treesitter、Python LSP
 
@@ -30,6 +30,75 @@ vim.opt.scrolloff = 4           -- 光标上下各保留 4 行可见，阅读不
 vim.opt.signcolumn = 'yes'      -- Git / 诊断符号栏固定显示，避免正文左右跳动
 vim.opt.laststatus = 3          -- 所有窗口共用一条底部状态栏
 vim.opt.showmode = false        -- 模式交给状态栏显示，避免重复的 -- INSERT --
+
+-- ### @syntax-colors 代码用经典 Vim 语法色，界面沿用 Neovim 默认主题
+do
+  -- 深、浅背景的前景色取自 $VIMRUNTIME/colors/vim.lua。
+  local palette = {
+    { '#80a0ff', 'Blue',    'Comment' },
+    { '#ffa0a0', 'Magenta', 'Constant String' },
+    { '#40ffff', 'DarkCyan', 'Identifier Function @variable @variable.member @variable.parameter @module @lsp.type.decorator' },
+    { '#ffff60', 'Brown',   'Statement Operator', bold = true },
+    { '#ff80ff', '#6a0dad', 'PreProc @constant.macro @function.macro @keyword.directive @keyword.import' },
+    { '#60ff60', 'SeaGreen', 'Type @keyword.type @lsp.type.namespace', bold = true },
+    { 'Orange', '#6a5acd',  'Special Delimiter @keyword.debug' },
+    { '#80a0ff', 'SlateBlue', 'Underlined', underline = true },
+    { 'Blue', 'Blue', 'Todo' },
+    { 'White', 'White', 'Error' },
+  }
+  local syntax_colors, captures = {}, {}
+  local group = vim.api.nvim_create_augroup('ClassicVimSyntax', { clear = true })
+  local function syntax_color(name, groups)
+    while name and not syntax_colors[name] do
+      name = (groups[name] or {}).link
+    end
+    return syntax_colors[name]
+  end
+  local function define_colors()
+    local background = vim.o.background == 'dark' and 1 or 2
+    for _, entry in ipairs(palette) do
+      local name = 'ClassicVim' .. entry[3]:match('^%w+')
+      vim.api.nvim_set_hl(0, name, { fg = entry[background], bold = entry.bold, underline = entry.underline })
+      for token in entry[3]:gmatch('%S+') do syntax_colors[token] = name end
+    end
+    -- 只重映射语法捕获；界面元素也可能引用 Comment、Special 等基础组。
+    local groups = vim.api.nvim_get_hl(0, {})
+    captures = {}
+    for token in pairs(vim.tbl_extend('keep', groups, syntax_colors)) do
+      if token:sub(1, 1) == '@' and not token:match('^@markup') then
+        captures[token] = syntax_color(token, groups)
+      end
+    end
+  end
+  local documents = { markdown = true, text = true, tex = true, plaintex = true, typst = true }
+  local function update_window()
+    local ft = vim.bo.filetype
+    local code = (vim.g.colors_name or 'default') == 'default'
+      and vim.bo.buftype == '' and ft ~= '' and not documents[ft]
+    local previous = vim.opt_local.winhighlight:get()
+    local current = {}
+    for token, name in pairs(previous) do
+      if not vim.startswith(name, 'ClassicVim') then current[token] = name end
+    end
+    if code then
+      current = vim.tbl_extend('keep', current, captures)
+      if vim.b.current_syntax and not vim.treesitter.highlighter.active[vim.api.nvim_get_current_buf()] then
+        -- 传统语法按文件类型定义自己的匹配组，例如 rubyConditional。
+        local groups = vim.api.nvim_get_hl(0, {})
+        for token in vim.fn.execute('silent syntax list'):gmatch('\n([%w_]+)%s+xxx') do
+          current[token] = current[token] or syntax_color(token, groups)
+        end
+      end
+    end
+    if not vim.deep_equal(previous, current) then vim.opt_local.winhighlight = current end
+  end
+  vim.api.nvim_create_autocmd({ 'BufWinEnter', 'WinEnter', 'FileType' }, { group = group, callback = update_window })
+  vim.api.nvim_create_autocmd('ColorScheme', { group = group, callback = function()
+    define_colors()
+    for _, win in ipairs(vim.api.nvim_list_wins()) do vim.api.nvim_win_call(win, update_window) end
+  end })
+  vim.cmd.colorscheme('default')
+end
 
 -- ### @autoread 文件自动重读
 -- AI/外部程序改文件后，回到 nvim 自动刷新（本地有未保存修改时不覆盖）
@@ -114,24 +183,6 @@ do
     end,
   })
 end
-
--- ### @avante-runtime 首次安装或更新时下载匹配的预编译库
--- 锁文件中的插件可能在第一次 vim.pack.add() 时安装，提前注册下载钩子。
-local avante_version = 'v0.5.0'
-vim.api.nvim_create_autocmd('PackChanged', {
-  group = vim.api.nvim_create_augroup('AvanteRuntime', { clear = true }),
-  callback = function(ev)
-    if ev.data.spec.name ~= 'avante.nvim' then return end
-    if ev.data.kind ~= 'install' and ev.data.kind ~= 'update' then return end
-    vim.system({ 'bash', vim.fs.joinpath(ev.data.path, 'build.sh'), avante_version }, {
-      timeout = 60000,
-    }, vim.schedule_wrap(function(result)
-      if result.code == 0 then return end
-      vim.notify('Avante 预编译库下载失败，可用 :AvanteBuild 重试。\n'
-        .. vim.trim(result.stderr or ''), vim.log.levels.WARN)
-    end))
-  end,
-})
 
 -- ## @documents 文档阅读
 -- ### @draft 只对 draft 命令打开的文件自动保存
@@ -223,7 +274,15 @@ local function attach_markdown_file_icons(ctx)
 end
 
 require('render-markdown').setup({
-  file_types = { 'markdown', 'Avante' },
+  file_types = { 'markdown', 'AgenticChat' },
+  overrides = {
+    filetype = {
+      markdown = {
+        render_modes = { 'n', 'c', 't', 'i' },
+        debounce = 0, -- 避免快速编辑后换行时丢掉光标行的重绘
+      },
+    },
+  },
   on = { attach = attach_markdown_file_icons },
   -- HTML 块 / LaTeX 公式 / YAML front matter 的额外美化用不到，
   -- 显式关闭（正文渲染不受影响；以后想要再删掉这几行即可）
@@ -320,6 +379,39 @@ vim.api.nvim_create_autocmd('FileType', {
   end,
 })
 
+-- ### @typst Typst 行内预览
+local kitty = vim.env.TERM == 'xterm-kitty' or (vim.env.TERM_PROGRAM or ''):lower() == 'kitty'
+local snacks_kitty = vim.env.SNACKS_KITTY
+local kitty_images = kitty and snacks_kitty ~= '0' and snacks_kitty ~= 'false'
+local inline_math = {
+  typst = kitty_images and vim.fn.executable('typst') == 1,
+  tex = kitty_images and (vim.fn.executable('pdflatex') == 1 or vim.fn.executable('tectonic') == 1),
+}
+local has_inline_math = inline_math.typst or inline_math.tex
+local inline_mermaid = kitty_images and vim.fn.executable('mmdc') == 1
+if (has_inline_math or inline_mermaid) and snacks_kitty == nil then
+  -- 用终端环境补足启动时可能来不及收到的终端响应。
+  vim.env.SNACKS_KITTY = 'true'
+end
+vim.pack.add({ { src = 'https://github.com/OXY2DEV/markview.nvim', version = 'v29.0.0' } })
+require('markview').setup({
+  preview = {
+    filetypes = { 'typst' },
+    map_gx = false,
+    modes = { 'n', 'no', 'i', 'c' },
+    hybrid_modes = { 'n', 'i' },
+    linewise_hybrid_mode = true, -- 光标所在行显示源码，其余行继续渲染
+  },
+  -- Kitty 中由 Snacks 排版公式，Markview 继续渲染标题、列表等。
+  typst = inline_math.typst and {
+    math_blocks = { enable = false },
+    math_spans = { enable = false },
+    symbols = { enable = false },
+    subscripts = { enable = false },
+    superscripts = { enable = false },
+  } or nil,
+})
+
 -- ### @snacks Snacks 图片预览与项目树
 -- WezTerm 不支持行内占位符 → 只能悬浮窗预览：
 -- 光标停在 ![..](..) 或图片路径上按空格延迟或 \i 弹出；也可直接 nvim 打开图片文件
@@ -378,13 +470,122 @@ snacks.setup({
     },
   },
   image = {
-    doc = { inline = false, float = true },
+    doc = {
+      inline = false,
+      float = true,
+      on_update_pre = function(placement)
+        if not placement.opts.inline then return end
+        if placement.opts.type == 'chart' then
+          -- 为行号、标记列和缩进留出宽度，窄窗口也能显示整张图。
+          local width = vim.o.columns
+          for _, win in ipairs(placement:wins()) do
+            local info = vim.fn.getwininfo(win)[1]
+            width = math.min(width, info.width - info.textoff - placement.opts.pos[2])
+          end
+          placement.opts.width = math.max(1, width)
+          return
+        end
+        -- 异步编译完成时也要保留光标处的公式源码。
+        if not has_inline_math or not placement.opts.conceal then return end
+        if placement.buf ~= vim.api.nvim_get_current_buf() then return end
+        local range = placement.opts.range
+        if not range then return end
+        local row, anchor = vim.fn.line('.'), vim.fn.line('v')
+        local mode = vim.fn.mode():sub(1, 1):lower()
+        placement.hidden = not vim.wo.concealcursor:find(mode, 1, true)
+          and range[1] <= math.max(row, anchor) and range[3] >= math.min(row, anchor)
+      end,
+    },
   },
 })
 
+if inline_math.tex then
+  local transforms = snacks.image.doc.transforms
+  local latex_transform = transforms.latex
+  transforms.latex = function(image, ctx)
+    if image.content and vim.bo[ctx.buf].filetype == 'tex' then
+      -- 显式定界符里的矩阵等环境仍需要外层数学模式。
+      image.content = image.content
+        :gsub('^(%s*%$+%s*)(\\begin%s*{)', '%1\\relax %2')
+        :gsub('^(%s*\\[%[%(]%s*)(\\begin%s*{)', '%1\\relax %2')
+    end
+    latex_transform(image, ctx)
+  end
+end
+
+if has_inline_math then
+  vim.api.nvim_create_autocmd('FileType', {
+    pattern = { 'typst', 'tex' },
+    callback = function(ev)
+      local buf = ev.buf
+      local ft = vim.bo[buf].filetype
+      if not inline_math[ft] then return end
+      if vim.bo[buf].buftype ~= '' or vim.b[buf].snacks_image_attached then return end
+      if ft == 'tex' and not vim.treesitter.get_parser(buf) then return end
+      -- 单独为公式启用行内预览。
+      vim.b[buf].snacks_image_attached = true
+      snacks.image.terminal.detect(function()
+        if not vim.api.nvim_buf_is_loaded(buf) or vim.bo[buf].filetype ~= ft then return end
+        if not snacks.image.terminal.env().placeholders then return end
+        if ft == 'tex' then
+          local function conceal_math_source()
+            for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+              vim.wo[win][0].conceallevel = 3
+              vim.wo[win][0].concealcursor = ''
+            end
+          end
+          conceal_math_source()
+          vim.api.nvim_create_autocmd('BufWinEnter', { buffer = buf, callback = conceal_math_source })
+        end
+        local inline = snacks.image.inline.new(buf)
+        vim.api.nvim_create_autocmd('CursorMovedI', {
+          buffer = buf,
+          callback = function() inline:conceal() end,
+        })
+      end)
+    end,
+  })
+end
+
+-- #### @mermaid Markdown 中的 Mermaid 图
+local function preview_image() snacks.image.hover() end
+if inline_mermaid then
+  local doc = snacks.image.doc
+  local find_visible = doc.find_visible
+  doc.find_visible = function(buf, cb)
+    if vim.bo[buf].filetype ~= 'markdown' then return find_visible(buf, cb) end
+    find_visible(buf, function(images)
+      cb(vim.tbl_filter(function(img) return img.lang == 'mermaid' end, images))
+    end)
+  end
+
+  -- 图已在正文显示时跳过自动弹窗，手动预览仍用原来的快捷键。
+  preview_image = doc.hover
+  doc.hover = function()
+    if not vim.b.mermaid_inline then return preview_image() end
+    doc.at_cursor(function(src)
+      if src and not vim.endswith(src, '.chart.mmd') then return preview_image() end
+      doc.hover_close()
+    end)
+  end
+  vim.api.nvim_create_autocmd('FileType', {
+    pattern = 'markdown',
+    callback = function(ev)
+      local buf = ev.buf
+      if vim.bo[buf].buftype ~= '' or vim.b[buf].mermaid_inline then return end
+      snacks.image.terminal.detect(function()
+        if not vim.api.nvim_buf_is_loaded(buf) or vim.bo[buf].filetype ~= 'markdown' then return end
+        if not snacks.image.terminal.env().placeholders or vim.b[buf].mermaid_inline then return end
+        vim.b[buf].mermaid_inline = true
+        snacks.image.inline.new(buf)
+      end)
+    end,
+  })
+end
+
 -- #### @document-keys 文档阅读快捷键
 -- \i：预览光标处图片（悬浮窗，按 q 或 Esc 关闭）
-vim.keymap.set('n', '<LocalLeader>i', function() require('snacks.image').hover() end, { desc = '预览光标处图片' })
+vim.keymap.set('n', '<LocalLeader>i', preview_image, { desc = '预览光标处图片或 Mermaid 图' })
 vim.keymap.set('n', '<LocalLeader>m', '<Cmd>RenderMarkdown toggle<CR>', { desc = '切换 Markdown 渲染' })
 
 -- ### @pdf PDF 文本阅读
@@ -495,7 +696,7 @@ require('which-key').setup({
   preset = 'classic',
   delay = 300,
   spec = {
-    { '<Leader>a', group = 'Avante' },
+    { '<Leader>a', group = 'Agentic' },
     { '<Leader>h', group = 'Git' },
   },
 })
@@ -631,24 +832,27 @@ vim.api.nvim_set_hl(0, 'GitSignsStagedAddLn', { bg = '#222b26' })
 vim.api.nvim_set_hl(0, 'GitSignsStagedChangeLn', { bg = '#222632' })
 vim.api.nvim_set_hl(0, 'GitSignsStagedDeleteLn', { bg = '#30242a' })
 
--- ## @avante Codex ACP 对话
-vim.pack.add({
-  'https://github.com/nvim-lua/plenary.nvim',
-  'https://github.com/MunifTanjim/nui.nvim',
-  'https://github.com/ColinKennedy/mega.logging',
-  'https://github.com/ColinKennedy/mega.cmdparse',
-  { src = 'https://github.com/avante-corp/avante.nvim', version = avante_version },
-})
-require('avante').setup({
-  provider = 'codex', -- 内置 ACP provider，从 PATH 启动 codex-acp
+-- ## @agentic Codex ACP 对话
+vim.pack.add({ 'https://github.com/carlos-algms/agentic.nvim' })
+local agentic = require('agentic')
+local codex_acp = vim.fn.expand('~/.local/share/avante-codex-acp/node_modules/.bin/codex-acp')
+agentic.setup({
+  provider = 'codex-acp',
   acp_providers = {
-    codex = {
-      -- 优先复用已安装的 Codex CLI，避免 ACP 内置版本不支持当前模型。
+    ['codex-acp'] = {
+      command = vim.fn.executable(codex_acp) == 1 and codex_acp or 'codex-acp',
       env = { CODEX_PATH = vim.env.CODEX_PATH or vim.fn.exepath('codex') },
     },
   },
-  behaviour = { auto_approve_tool_permissions = false },
 })
+-- 沿用 @autoread，避免插件强制重载有未保存修改的文件。
+vim.api.nvim_clear_autocmds({ group = 'AgenticCleanup', event = 'FileChangedShell', pattern = '*' })
+vim.keymap.set({ 'n', 'x' }, '<Leader>aa', agentic.open, { desc = '打开 Codex 对话' })
+vim.keymap.set('n', '<Leader>at', agentic.toggle, { desc = '切换 Codex 侧栏' })
+vim.keymap.set({ 'n', 'x' }, '<Leader>ac', agentic.add_selection_or_file_to_context, { desc = '添加选区或文件' })
+vim.keymap.set({ 'n', 'x' }, '<Leader>an', agentic.new_session, { desc = '新建 Codex 对话' })
+vim.keymap.set('n', '<Leader>ah', agentic.restore_session, { desc = '恢复 Codex 对话' })
+vim.keymap.set('n', '<Leader>aS', agentic.stop_generation, { desc = '停止当前回复' })
 
 -- ## @statusline 状态栏
 -- ### @lualine-theme lualine 插件与主题
@@ -718,7 +922,7 @@ require('lualine').setup({
 -- 0.11+ 高亮/折叠由 nvim 内置引擎接管，旧式 setup({highlight=...}) 已废弃
 vim.pack.add({ 'https://github.com/nvim-treesitter/nvim-treesitter' })
 -- Neovim 自带 c/lua/markdown/query/vim/vimdoc；其余 parser 声明式安装：
--- 新机器部署后自动补齐（已装则跳过、无网络动作）。
+-- 新机器部署后自动补齐（已装则跳过、无网络动作）。LaTeX 单独安装预生成 parser。
 -- 注意：vim.pack.update() 升级本插件后需跑 :TSUpdate 同步 parser 版本
 require('nvim-treesitter').install({
   -- 常用脚本与配置
@@ -728,6 +932,8 @@ require('nvim-treesitter').install({
   'make', 'cmake', 'dockerfile', 'requirements', 'ssh_config',
   -- Web / 数据
   'html', 'css', 'javascript', 'typescript', 'tsx', 'sql', 'xml', 'csv', 'tsv',
+  -- 文档
+  'typst',
 })
 
 -- #### @treesitter-display Treesitter 高亮与折叠
