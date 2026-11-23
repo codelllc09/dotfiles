@@ -1,12 +1,50 @@
 #!/bin/bash
-# 幂等安装：把每个包目录里的文件 symlink 到 $HOME 对应位置。
-# 新增包 = 建同名目录、按真实路径摆放文件、重跑本脚本。
-# 保护规则：目标处若已存在"真实文件"（非 symlink）则跳过并提示，
-# 先手动 mv 进包目录再重跑。
-# 需要手動安裝 curl tar xz fzf zoxide vicinae（Terra 倉庫），例如在federa則執行`sudo install ...`
-
+# 按桌面将选定包中的配置逐文件链接到家目录。
 set -euo pipefail
-cd "$(dirname "$0")"
+
+usage() {
+  cat <<'EOF'
+用法：./install.sh [niri|gnome|all]
+  niri   部署 kitty、niri、noctalia
+  gnome  部署 kitty、gnome、vicinae
+  all    部署两套桌面，以及 bash、emacs、kde、nvim、yazi
+省略参数时识别当前桌面，无法识别时请明确指定。
+EOF
+}
+
+if (( $# > 1 )); then
+  usage >&2
+  exit 2
+fi
+
+if (( $# == 0 )); then
+  session=${XDG_CURRENT_DESKTOP:-${XDG_SESSION_DESKTOP:-}}
+  case ":${session,,}:" in
+    *:niri:*) profile=niri ;;
+    *:gnome:*) profile=gnome ;;
+    *)
+      echo "无法识别当前桌面，请指定 niri 或 gnome。" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+else
+  profile=$1
+fi
+
+niri_packages=(niri noctalia)
+gnome_packages=(gnome vicinae)
+packages=(kitty)
+case "$profile" in
+  niri)  packages+=("${niri_packages[@]}") ;;
+  gnome) packages+=("${gnome_packages[@]}") ;;
+  all)   packages+=("${niri_packages[@]}" "${gnome_packages[@]}" bash emacs kde nvim yazi) ;;
+  -h|--help) usage; exit 0 ;;
+  *) usage >&2; exit 2 ;;
+esac
+
+cd -- "$(dirname -- "$0")"
+repo_root=$PWD
 
 blesh_tmp_dir=
 cleanup_blesh_tmp() {
@@ -60,45 +98,45 @@ report_optional_shell_tools() {
   done
 }
 
-# 2026-09：WezTerm 主配置已迁到 XDG 路径。仅清理由本仓库旧布局
-# 创建的 ~/.wezterm.lua 链接；真实文件或其他来源的链接一律不碰。
-repo_root="$(pwd)"
-legacy_wezterm="$HOME/.wezterm.lua"
-legacy_wezterm_target="$repo_root/wezterm/.wezterm.lua"
-if [ -L "$legacy_wezterm" ] && [ "$(readlink "$legacy_wezterm")" = "$legacy_wezterm_target" ]; then
-  unlink "$legacy_wezterm"
-  echo "移除旧链接: $legacy_wezterm"
-fi
-
-# Bash 历史是 state，不进入 dotfiles。首次部署时把传统路径迁到
-# XDG_STATE_HOME；若两边都存在则不自动合并，避免覆盖历史。
-bash_state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
-bash_state_dir="$bash_state_home/bash"
-legacy_bash_history="$HOME/.bash_history"
-xdg_bash_history="$bash_state_dir/history"
-mkdir -p "$bash_state_dir"
-if [ -f "$legacy_bash_history" ] && [ ! -e "$xdg_bash_history" ]; then
-  mv "$legacy_bash_history" "$xdg_bash_history"
-  echo "迁移 Bash 历史: $legacy_bash_history -> $xdg_bash_history"
-elif [ -f "$legacy_bash_history" ] && [ -e "$xdg_bash_history" ]; then
-  echo "保留旧 Bash 历史（XDG 目标已存在，请手动合并）: $legacy_bash_history"
-fi
-
-for pkg in */; do
-  pkg="${pkg%/}"
-  [ -d "$pkg" ] || continue
-  find "$pkg" -type f | while IFS= read -r f; do
-    src="$(pwd)/$f"
-    dst="$HOME/${f#$pkg/}"
-    mkdir -p "$(dirname "$dst")"
+echo "部署 $profile 配置：${packages[*]}"
+for pkg in "${packages[@]}"; do
+  find "$pkg" -type f -print0 | while IFS= read -r -d '' f; do
+    src="$repo_root/$f"
+    dst="$HOME/${f#"$pkg"/}"
+    mkdir -p -- "$(dirname -- "$dst")"
     if [ -e "$dst" ] && [ ! -L "$dst" ]; then
       echo "跳过（目标已是真实文件，请先 mv 进包）: $dst"
     else
-      ln -sfn "$src" "$dst"
+      ln -sfn -- "$src" "$dst"
       echo "链接: $dst -> $src"
     fi
   done
 done
 
-install_blesh
-report_optional_shell_tools
+if [[ $profile == all ]]; then
+  # 2026-09：WezTerm 主配置已迁到 XDG 路径。仅清理由本仓库旧布局
+  # 创建的 ~/.wezterm.lua 链接；真实文件或其他来源的链接一律不碰。
+  legacy_wezterm="$HOME/.wezterm.lua"
+  legacy_wezterm_target="$repo_root/wezterm/.wezterm.lua"
+  if [ -L "$legacy_wezterm" ] && [ "$(readlink "$legacy_wezterm")" = "$legacy_wezterm_target" ]; then
+    unlink "$legacy_wezterm"
+    echo "移除旧链接: $legacy_wezterm"
+  fi
+
+  # Bash 历史是 state，不进入 dotfiles。首次部署时把传统路径迁到
+  # XDG_STATE_HOME；若两边都存在则不自动合并，避免覆盖历史。
+  bash_state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+  bash_state_dir="$bash_state_home/bash"
+  legacy_bash_history="$HOME/.bash_history"
+  xdg_bash_history="$bash_state_dir/history"
+  mkdir -p "$bash_state_dir"
+  if [ -f "$legacy_bash_history" ] && [ ! -e "$xdg_bash_history" ]; then
+    mv "$legacy_bash_history" "$xdg_bash_history"
+    echo "迁移 Bash 历史: $legacy_bash_history -> $xdg_bash_history"
+  elif [ -f "$legacy_bash_history" ] && [ -e "$xdg_bash_history" ]; then
+    echo "保留旧 Bash 历史（XDG 目标已存在，请手动合并）: $legacy_bash_history"
+  fi
+
+  install_blesh
+  report_optional_shell_tools
+fi

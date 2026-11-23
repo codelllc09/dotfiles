@@ -10,16 +10,15 @@
 | 頂欄監控 | Noctalia 顯示 CPU、記憶體與網速 | GNOME Shell 擴充套件 Astra Monitor v43 |
 | 中文輸入 | Fcitx 5 + Rime | IBus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
 
-兩套桌面的預設終端都是 kitty。新機先安裝所選桌面的軟體與 GNU Stow，再從倉庫根目錄執行對應的命令。`--no-folding` 會逐檔建立連結，家目錄中的設定目錄可繼續存放其他檔案。[GNU Stow 手冊](https://www.gnu.org/software/stow/manual/html_node/Invoking-Stow.html)
+在倉庫根目錄執行 `./install.sh` 會依目前的 Niri 或 GNOME 工作階段選擇配置。新機、TTY 或 SSH 中可直接指定桌面。先安裝該桌面所需的軟體，腳本負責連結設定檔。
 
-| 部署範圍 | 命令 |
+| 命令 | 部署的設定包 |
 |---|---|
-| Niri | `stow --no-folding -t "$HOME" niri noctalia kitty` |
-| GNOME | `stow --no-folding -t "$HOME" gnome vicinae kitty` |
-| 任一桌面選用 Dolphin | `stow --no-folding -t "$HOME" kde` |
-| 任一桌面選用 Bash、Emacs、Neovim 或 Yazi | 從 `bash emacs nvim yazi` 選取，例如 `stow --no-folding -t "$HOME" nvim` |
+| `./install.sh niri` | `kitty`、`niri`、`noctalia` |
+| `./install.sh gnome` | `kitty`、`gnome`、`vicinae` |
+| `./install.sh all` | 兩套桌面，加上 `bash`、`emacs`、`kde`（Dolphin）、`nvim`、`yazi` |
 
-需要倉庫內全部設定時才執行 `./install.sh`。腳本會遍歷所有包，並在缺少 ble.sh 時用 `curl`、`tar`、`xz` 安裝。
+兩套桌面共用 kitty。切換參數只會補上所選配置，會保留先前部署的另一套桌面。若只想加裝個別工具，安裝 GNU Stow 後可執行 `stow --no-folding -t "$HOME" nvim`，將 `nvim` 換成所需的包名。[GNU Stow 手冊](https://www.gnu.org/software/stow/manual/html_node/Invoking-Stow.html)
 
 ## Niri 與 Noctalia
 
@@ -95,7 +94,7 @@ dconf dump /org/gnome/shell/extensions/astra-monitor/ > ~/dotfiles/gnome/.config
 | 組件 | 版本 |
 |---|---|
 | 終端 | kitty 0.50.0，使用 `splits` 佈局與自訂分頁列。[快捷鍵與工作區](kitty/.config/kitty/README.md) |
-| Bash 行編輯器 | ble.sh 0.4 nightly（由 `install.sh` 安裝至 XDG data 目錄） |
+| Bash 行編輯器 | ble.sh 0.4 nightly（由 `./install.sh all` 安裝至 XDG data 目錄） |
 | 編輯器 | GNU Emacs 30.2（原生 package.el + use-package 模組化配置） |
 | 編輯器／文檔閱讀 | Neovim 0.12.5（Markdown、Typst、LaTeX 預覽及 Codex 側欄，插件由內建 vim.pack 管理） |
 | 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底；斜體楷體用 LXGW WenKai Mono（GitHub lxgw/LxgwWenKai v1.530，手動下載至 ~/.local/share/fonts，不入庫） |
@@ -143,11 +142,11 @@ ffmpegthumbnailer（視頻首幀）由 dnf 安裝，不入庫；插件本體在
 ### Bash
 
 Bash 只在家目录保留其固定入口 `~/.bash_profile` 与 `~/.bashrc`；实际配置
-位于 `~/.config/bash/`。命令历史属于 state，部署脚本会在目标尚不存在时
+位于 `~/.config/bash/`。命令历史属于 state，`./install.sh all` 会在目标尚不存在时
 将 `~/.bash_history` 一次性迁到 `${XDG_STATE_HOME:-~/.local/state}/bash/history`，
 不会把历史提交进仓库。
 
-ble.sh 的程式檔屬於外部依賴，不進 dotfiles；`install.sh` 會在尚未安裝時從
+ble.sh 的程式檔屬於外部依賴，不進 dotfiles；`./install.sh all` 會在尚未安裝時從
 官方 nightly release 下載至 `${XDG_DATA_HOME:-~/.local/share}/blesh`，重跑時保留
 既有安裝。下載需要 `curl`、`tar` 與 `xz`。fzf、zoxide、Starship 仍由系統或
 各自安裝器管理；缺少時部署腳本會提示，對應 Bash 模組則靜默跳過。
