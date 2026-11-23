@@ -83,7 +83,7 @@ action = "command"
 enabled = true
 timeout = 600
 command = '"$HOME/.local/bin/screensaver"'
-resume_command = "pkill -f '^(/usr/bin/)?mpv .*--title=[s]aver( |$)' || true"
+resume_command = "gapplication action local.niri.BubbleScreensaver quit 2>/dev/null || true"
 
 [widget.battery]
 display_mode = "graphic"

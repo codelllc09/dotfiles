@@ -1,14 +1,103 @@
-#!/usr/bin/env bash
-# screensaver — 泡泡屏保（mpv 全屏循環，Noctalia 閒置 10 分鐘觸發，活動即殺）
-# 素材替換：直接覆蓋 ~/Videos/screensaver.mp4 即可，零配置改動
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-exec mpv \
-  --really-quiet \
-  --fullscreen \
-  --loop-file=inf \
-  --title=saver \
-  --no-osd-bar \
-  --no-input-default-bindings \
-  --no-input-cursor \
-  --cursor-autohide=always \
-  "$HOME/Videos/screensaver.mp4"
+#!/usr/bin/gjs
+// 黑底泡泡屏保。直接运行试播；移动鼠标、点击或按键退出。
+imports.gi.versions.Gtk = '3.0';
+const {Gtk, Gdk, Gio, GLib, Gst, GtkLayerShell: Layer} = imports.gi;
+const System = imports.system;
+
+const filename = ARGV[0] ?? GLib.build_filenamev([GLib.get_home_dir(), 'Videos', 'bubbles-loop.webm']);
+const app = new Gtk.Application({application_id: 'local.niri.BubbleScreensaver'});
+const quit = Gio.SimpleAction.new('quit', null);
+quit.connect('activate', () => app.quit());
+app.add_action(quit);
+let pipeline = null;
+let failed = false;
+
+function fail(message) {
+    printerr(message);
+    failed = true;
+    app.quit();
+}
+
+function start() {
+    if (pipeline) return;
+    if (!Layer.is_supported()) throw new Error('需要支持 layer-shell 的 Wayland 桌面');
+    if (!GLib.file_test(filename, GLib.FileTest.IS_REGULAR)) throw new Error('找不到视频 ' + filename);
+    Gst.init(null);
+    // 窗口用 GTK 布局，视频帧由原生 Wayland 视频控件交给合成器。
+    pipeline = Gst.parse_launch('filesrc name=file ! matroskademux ! decodebin ! '
+        + 'videoconvert ! queue max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! gtkwaylandsink name=screen');
+    pipeline.get_by_name('file').location = filename;
+    const sink = pipeline.get_by_name('screen');
+    const win = new Gtk.ApplicationWindow({application: app, decorated: false, title: '泡泡屏保'});
+    Layer.init_for_window(win);
+    Layer.set_namespace(win, 'bubble-screensaver');
+    Layer.set_layer(win, Layer.Layer.OVERLAY);
+    Layer.set_exclusive_zone(win, -1);
+    Layer.set_keyboard_mode(win, Layer.KeyboardMode.EXCLUSIVE);
+    for (const edge of [Layer.Edge.LEFT, Layer.Edge.RIGHT, Layer.Edge.TOP, Layer.Edge.BOTTOM])
+        Layer.set_anchor(win, edge, true);
+
+    const css = new Gtk.CssProvider();
+    css.load_from_data('window { background-color: black; }');
+    win.get_style_context().add_provider(css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
+    const input = new Gtk.EventBox({above_child: true, visible_window: false});
+    input.add(sink.widget);
+    win.add(input);
+    const dismiss = () => { app.quit(); return true; };
+    win.connect('key-press-event', dismiss);
+    input.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.TOUCH_MASK);
+    input.connect('button-press-event', dismiss);
+    input.connect('touch-event', dismiss);
+    let pointer = null;
+    input.connect('motion-notify-event', (_widget, event) => {
+        const [, x, y] = event.get_root_coords();
+        if (pointer && Math.hypot(x-pointer[0], y-pointer[1]) > 3) return dismiss();
+        if (!pointer) pointer = [x, y];
+        return false;
+    });
+    win.connect('map-event', () => {
+        const cursor = Gdk.Cursor.new_for_display(win.get_display(), Gdk.CursorType.BLANK_CURSOR);
+        win.get_window().set_cursor(cursor);
+        return false;
+    });
+
+    // 首次定位清空预卷；后续在缓冲区播完前续上下一圈。
+    const bus = pipeline.get_bus();
+    bus.add_signal_watch();
+    let duration = 0;
+    function loopSegment(first) {
+        let flags = Gst.SeekFlags.SEGMENT | Gst.SeekFlags.ACCURATE;
+        if (first) flags |= Gst.SeekFlags.FLUSH;
+        if (!pipeline.seek(1.0, Gst.Format.TIME, flags, Gst.SeekType.SET, 0, Gst.SeekType.SET, duration))
+            throw new Error('视频无法循环定位');
+    }
+    bus.connect('message', (_bus, msg) => {
+        try {
+            if (msg.type === Gst.MessageType.ERROR) throw msg.parse_error()[0];
+            if (msg.type === Gst.MessageType.ASYNC_DONE && !duration) {
+                const [known, end] = pipeline.query_duration(Gst.Format.TIME);
+                if (!known || end <= 0) throw new Error('无法读取视频长度');
+                duration = end;
+                loopSegment(true);
+                pipeline.set_state(Gst.State.PLAYING);
+            } else if (msg.type === Gst.MessageType.SEGMENT_DONE) {
+                console.debug('Loop boundary, ' + sink.stats.to_string());
+                loopSegment(false);
+            } else if (msg.type === Gst.MessageType.EOS) {
+                throw new Error('循环提前结束');
+            }
+        } catch (error) { fail(error.message); }
+    });
+    win.show_all();
+    if (pipeline.set_state(Gst.State.PAUSED) === Gst.StateChangeReturn.FAILURE)
+        throw new Error('视频解码器初始化失败');
+}
+
+app.connect('activate', () => {
+    try { start(); } catch (error) { fail(error.message); }
+});
+app.connect('shutdown', () => {
+    if (pipeline) pipeline.set_state(Gst.State.NULL);
+});
+const status = app.run([]);
+System.exit(failed ? 1 : status);
