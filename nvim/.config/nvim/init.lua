@@ -417,6 +417,8 @@ require('markview').setup({
 -- 光标停在 ![..](..) 或图片路径上按空格延迟或 \i 弹出；也可直接 nvim 打开图片文件
 vim.pack.add({ 'https://github.com/folke/snacks.nvim' })
 local snacks = require('snacks')
+local mermaid_config = '{"flowchart":{"wrappingWidth":240}}'
+local mermaid_config_file
 local explorer_cursorline = vim.api.nvim_create_namespace('SnacksExplorerCursorLine')
 snacks.util.set_hl({
   SnacksExplorerCursorLine = { bg = '#304668' },
@@ -470,19 +472,32 @@ snacks.setup({
     },
   },
   image = {
+    convert = {
+      mermaid = function()
+        if not mermaid_config_file then
+          local path = vim.fn.tempname()
+          vim.fn.writefile({ mermaid_config }, path)
+          mermaid_config_file = path
+        end
+        local theme = vim.o.background == 'light' and 'neutral' or 'dark'
+        return { '-i', '{src}', '-o', '{file}', '-b', 'transparent', '-t', theme, '-s', '{scale}', '-c', mermaid_config_file }
+      end,
+    },
     doc = {
       inline = false,
       float = true,
       on_update_pre = function(placement)
         if not placement.opts.inline then return end
         if placement.opts.type == 'chart' then
-          -- 为行号、标记列和缩进留出宽度，窄窗口也能显示整张图。
-          local width = vim.o.columns
+          -- 同一张图在各分屏共享占位，取最小正文宽度和窗口高度。
+          local width, height = vim.o.columns, vim.o.lines
           for _, win in ipairs(placement:wins()) do
             local info = vim.fn.getwininfo(win)[1]
             width = math.min(width, info.width - info.textoff - placement.opts.pos[2])
+            height = math.min(height, vim.api.nvim_win_get_height(win))
           end
-          placement.opts.width = math.max(1, width)
+          placement.opts.max_width = math.max(1, width)
+          placement.opts.max_height = math.max(1, math.floor(height * 0.6))
           return
         end
         -- 异步编译完成时也要保留光标处的公式源码。
@@ -549,6 +564,15 @@ end
 
 -- #### @mermaid Markdown 中的 Mermaid 图
 local function preview_image() snacks.image.hover() end
+if vim.fn.executable('mmdc') == 1 then
+  -- Snacks 默认只按源码缓存，渲染参数变化后也要重新生成图片。
+  snacks.image.doc.transforms.mermaid = function(img)
+    if img.content then
+      local scale = snacks.image.terminal.size().scale
+      img.content_id = vim.fn.sha256(table.concat({ mermaid_config, scale, img.content }, '\n')):sub(1, 16)
+    end
+  end
+end
 if inline_mermaid then
   local doc = snacks.image.doc
   local find_visible = doc.find_visible
