@@ -12,6 +12,7 @@ fi
 for bash_config_file in \
   "$bash_config_dir/env.bash" \
   "$bash_config_dir/env.local.bash" \
+  "$bash_config_dir/secret.bash" \ # 手动创建并管理，权限600
   "$bash_config_dir/history.bash" \
   "$bash_config_dir/aliases.bash" \
   "$bash_config_dir/navigation.bash" \
