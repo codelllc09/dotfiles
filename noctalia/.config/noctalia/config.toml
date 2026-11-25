@@ -24,6 +24,8 @@ enable_daemon = true
 
 [bar.default]
 thickness = 28
+background_opacity = 0.60
+compositor_blur = true
 margin_ends = 0
 padding = 8
 start = ["workspaces", "taskbar", "active_window"]
