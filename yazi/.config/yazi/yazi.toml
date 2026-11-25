@@ -37,7 +37,7 @@ run = "office"
 # 本机无 sqlite3 CLI，故不用 AminurAlam/preview-sqlite）
 [[plugin.prepend_previewers]]
 url = "*.{db,sqlite,sqlite3,db3}"
-run = 'piper -- python3 /home/lcw/.config/yazi/scripts/sqlite-preview.py "$1"'
+run = 'piper -- python3 "${YAZI_CONFIG_HOME:-${XDG_CONFIG_HOME:-$HOME/.config}/yazi}/scripts/sqlite-preview.py" "$1"'
 
 # epub（preview-epub.yazi）与 cbz/cbr（preview-cbz.yazi）的规则
 # 由 init.lua 里的 :setup() 自动注册，无需在此声明
