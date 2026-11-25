@@ -514,6 +514,89 @@ snacks.setup({
   },
 })
 
+-- #### @obsidian Obsidian 图片嵌入（链接规则见 snacks.nvim.help.md）
+do
+  local indexes = {}
+  vim.api.nvim_create_autocmd({ 'FocusGained', 'BufFilePost', 'ShellCmdPost' }, {
+    callback = function() indexes = {} end,
+  })
+
+  -- 只在短链接或大小写需要匹配时遍历库。连续移动光标复用文件名索引。
+  local function named_files(vault, name)
+    local cache = indexes[vault]
+    if cache and vim.uv.now() - cache.time < 30000 then
+      local matches = cache.files[name] or {}
+      if vim.iter(matches):all(function(path)
+        return vim.uv.fs_stat(vim.fs.joinpath(vault, path)) ~= nil
+      end) then return matches end
+    end
+    local files = {}
+    local function visible(path) return vim.fs.basename(path):sub(1, 1) ~= '.' end
+    for path, kind in vim.fs.dir(vault, { depth = math.huge, skip = visible }) do
+      if visible(path) and (kind == 'file' or
+          (kind == 'link' and vim.fn.filereadable(vim.fs.joinpath(vault, path)) == 1)) then
+        local key = vim.fn.tolower(vim.fs.basename(path))
+        files[key] = files[key] or {}
+        table.insert(files[key], path)
+      end
+    end
+    indexes[vault] = { time = vim.uv.now(), files = files }
+    return files[name] or {}
+  end
+
+  local function find_image(vault, dir, target)
+    local relative = vim.startswith(target, './') or vim.startswith(target, '../')
+    local anchored = vim.startswith(target, '/')
+    local base = relative and dir or vault
+    local full = vim.fs.normalize(vim.fs.joinpath(base, target), { expand_env = false })
+    local wanted = vim.fs.relpath(vault, full)
+    if not wanted then return end
+    if vim.fn.filereadable(full) == 1 then return full end
+
+    wanted = vim.fn.tolower(wanted)
+    local candidates = named_files(vault, vim.fs.basename(wanted))
+    local nearby = dir == vault and '' or vim.fn.tolower(vim.fs.relpath(vault, dir))
+    local best, best_rank, best_length
+    for _, path in ipairs(candidates) do
+      local lower = vim.fn.tolower(path)
+      if lower == wanted then return vim.fs.joinpath(vault, path) end
+      -- Obsidian 1.15 的短链接按路径后缀匹配，同名时优先笔记目录前缀。
+      if not anchored and vim.endswith(lower, wanted) then
+        local rank = vim.startswith(lower, nearby) and 0 or 1
+        local length = vim.str_utfindex(path, 'utf-16')
+        if not best or rank < best_rank or (rank == best_rank and
+            (length < best_length or (length == best_length and path < best))) then
+          best, best_rank, best_length = path, rank, length
+        end
+      end
+    end
+    if best then return vim.fs.joinpath(vault, best) end
+  end
+
+  snacks.image.doc.transforms.markdown_inline = function(img, ctx)
+    if not img.src or img.src:match('^%a[%w+.-]*:') or vim.startswith(img.src, '//') then return end
+    local dir = vim.fs.dirname(vim.api.nvim_buf_get_name(ctx.buf))
+    local vault = dir and vim.fs.root(dir, '.obsidian')
+    if not vault then return end
+    local wiki = ctx.src.node:type() == 'link_text'
+    -- Snacks 已拆掉 |宽度；# 后是片段。只有 Markdown 地址需要 URL 解码。
+    local target = vim.trim(img.src:match('^[^#]*'))
+    if wiki then
+      target = target:gsub('\\$', '') -- 表格里用 \| 分隔文件名和尺寸
+    else
+      target = vim.uri_decode((target:gsub('\\(%p)', '%1')))
+    end
+    if target == '' or target:find('\0', 1, true) then return end
+    local path = find_image(vault, dir, target)
+    if path then
+      -- Snacks 随后会解码一次；保护真实文件名中的 +、% 等字符。
+      img.src = vim.uri_encode(path, 'rfc2396')
+    elseif wiki then
+      img.src = nil
+    end
+  end
+end
+
 if inline_math.tex then
   local transforms = snacks.image.doc.transforms
   local latex_transform = transforms.latex
