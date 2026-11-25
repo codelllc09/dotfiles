@@ -6,11 +6,11 @@
 |---|---|---|
 | 啟動器 | `Super+D` 開 Noctalia | `Super+R` 開 Vicinae 0.29.2 |
 | 剪貼簿歷史 | `Super+Y` 開 Noctalia | `Ctrl+Alt+V` 開 Vicinae |
-| 截圖與標註 | `Print` 互動截圖、`Ctrl+Print` 全螢幕、`Alt+Print` 目前視窗。`Super+Shift+Y` 用 Noctalia 標註剪貼簿圖片 | `Ctrl+Print` 選區，截圖後進入 Gradia 1.14.0 |
+| 截圖與標註 | `Print` 互動截圖、`Ctrl+Print` 全螢幕、`Alt+Print` 目前視窗。`Super+Shift+Y` 用 Noctalia 標註剪貼簿圖片 | `Ctrl+Print` 開啟互動截圖，完成後進入 Gradia 1.14.0 |
 | 頂欄監控 | Noctalia 顯示 CPU、記憶體與網速 | GNOME Shell 擴充套件 Astra Monitor v43 |
 | 中文輸入 | Fcitx 5 + Rime | IBus 1.5.34-4.fc44 + ibus-rime 1.6.0-2.fc44 |
 
-在倉庫根目錄執行 `./install.sh` 會依目前的 Niri 或 GNOME 工作階段選擇配置。新機、TTY 或 SSH 中可直接指定桌面。先安裝該桌面所需的軟體，腳本負責連結設定檔。
+先安裝所需的桌面軟體，再從 Git 工作副本根目錄執行 `./install.sh`。腳本會辨識目前的 Niri 或 GNOME 工作階段，逐檔建立符號連結。在 TTY 或 SSH 中可直接指定桌面。
 
 每個模式都會部署 kitty、Bash、Emacs、Dolphin（`kde`）、Neovim 和 Yazi 的設定。
 
@@ -20,7 +20,9 @@
 | `./install.sh gnome` | `gnome`、`vicinae` |
 | `./install.sh all` | 上述兩套桌面的設定 |
 
-切換參數只會補上所選配置，會保留先前部署的另一套桌面。若只想加裝個別工具，安裝 GNU Stow 後可執行 `stow --no-folding -t "$HOME" nvim`，將 `nvim` 換成所需的包名。[GNU Stow 手冊](https://www.gnu.org/software/stow/manual/html_node/Invoking-Stow.html)
+切換模式會保留另一套桌面的設定。已連到同一來源的檔案會跳過。若目標已有其他檔案或連結，腳本會保留原檔、繼續部署，最後列出衝突並以狀態碼 1 結束。`all` 另會移除指向本倉庫舊版 `wezterm/.wezterm.lua` 的 `~/.wezterm.lua` 連結。現行 WezTerm 配置需另行部署。
+
+使用預設 XDG 路徑時，可用 GNU Stow 單獨部署工具。例如在倉庫根目錄執行 `stow --no-folding --ignore='^tests$' -t "$HOME" nvim`，即可連結 Neovim 設定並略過測試目錄。[GNU Stow 手冊](https://www.gnu.org/software/stow/manual/html_node/Invoking-Stow.html)
 
 ## Niri 與 Noctalia
 
@@ -35,13 +37,13 @@ systemctl --user enable noctalia.service fcitx5-niri.service
 - Niri 用 Papers 開 PDF、Loupe 開 PNG 和 JPEG。登入時啟動 KDE Connect 指示器。[預設應用](niri/.config/niri-mimeapps.list)
 - Noctalia 的頂欄與閒置動作由 `noctalia` 包管理。GUI 修改寫入 `~/.local/state/noctalia/settings.toml`，同名設定以該檔為準。[Noctalia 設定](noctalia/.config/noctalia/config.toml)
 
-閒置 10 分鐘後播放 `~/Videos/bubbles-loop.webm`，移動滑鼠、點擊或按鍵即可退出。泡泡屏保依賴 GJS、GTK 3 layer-shell 和 GStreamer（Matroska、VP8、gtkwaylandsink）。重建影片才需要 NumPy、Pillow 和支援 libvpx 的 FFmpeg。[影片生成器](noctalia/.local/share/bubble-screensaver/render.py)
+新機先將泡泡影片複製到 `~/Videos/bubbles-loop.webm`，或用倉庫的生成器輸出到該路徑。閒置 10 分鐘後播放，移動滑鼠、點擊或按鍵即可退出。播放需要 GJS、GTK 3 layer-shell 和 GStreamer（Matroska、VP8、gtkwaylandsink）。生成影片另需 NumPy、Pillow 和支援 libvpx 的 FFmpeg。[影片生成器](noctalia/.local/share/bubble-screensaver/render.py)
 
-頂欄的中英文指示器需用 C 編譯器、pkg-config 和 GLib 開發檔重建。Fedora 對應套件為 `gcc`、`pkgconf-pkg-config`、`glib2-devel`。
+頂欄的中英文指示器需另行編譯。在 Fedora 裝好 `gcc`、`pkgconf-pkg-config` 和 `glib2-devel` 後，從倉庫根目錄執行下列命令。
 
 ```bash
 mkdir -p ~/.local/libexec
-cc -O2 ~/.local/share/noctalia/plugins/panel-status/fcitx-mode.c \
+cc -O2 noctalia/.local/share/noctalia/plugins/panel-status/fcitx-mode.c \
   $(pkg-config --cflags --libs gio-2.0) -o ~/.local/libexec/waybar-fcitx-mode
 ```
 
@@ -87,7 +89,7 @@ dconf dump /org/gnome/shell/extensions/astra-monitor/ > ~/dotfiles/gnome/.config
 兩套桌面共用 `kde` 包的 Papirus-Dark 圖示設定及 `dolphinrc`。GNOME 模式另附外觀恢復腳本。執行 `~/.local/bin/dolphin-gnome-restore`，為 Qt 的 Breeze 圖示主題建立影子主題，將四個視窗按鈕換成 Adwaita 圖示。缺少 Papirus 時腳本會提示安裝方式。重開 Dolphin 生效，還原用 `~/.local/bin/dolphin-gnome-restore --uninstall`。[外觀恢復腳本](kde/.local/bin/dolphin-gnome-restore)
 
 - Fedora 或 GNOME 大版本升級後，重跑外觀腳本並確認 Dolphin 的最小化、最大化與關閉按鈕。
-- Fedora 大版本升級後，修改 ibus-rime 設定前先執行 `rime_deployer --sync` 同步詞庫。
+- Fedora 大版本升級後，修改 ibus-rime 設定前，先在 Rime 輸入法選單點選「Sync data」同步使用者詞庫。
 
 ## 共用與按需工具
 
@@ -99,21 +101,24 @@ dconf dump /org/gnome/shell/extensions/astra-monitor/ > ~/dotfiles/gnome/.config
 | Bash 行編輯器 | ble.sh 0.4 nightly（由 `install.sh` 安裝至 XDG data 目錄） |
 | 編輯器 | GNU Emacs 30.2（原生 package.el + use-package 模組化配置） |
 | 編輯器／文檔閱讀 | Neovim 0.12.5（Markdown、Typst、LaTeX 預覽及 Codex 側欄，插件由內建 vim.pack 管理） |
-| 字體 | Maple Mono NF CN（主字體）+ Noto Sans Mono CJK SC 兜底；斜體楷體用 LXGW WenKai Mono（GitHub lxgw/LxgwWenKai v1.530，手動下載至 ~/.local/share/fonts，不入庫） |
-| 文件管理器 | yazi 26.9.1（插件由 ya pkg 管理）+ swayimg 5.6 / ffmpegthumbnailer 2.3（dnf；畫廊式看圖與視頻首幀） |
+| 字體 | 終端主字體為 Maple Mono NF CN，斜體用 LXGW WenKai Mono（lxgw/LxgwWenKai v1.530，手動安裝至 `~/.local/share/fonts/`）。kitty 由 Fontconfig 補缺字，WezTerm 指定 Noto Sans Mono CJK SC 作為後備字體。 |
+| 文件管理器 | Yazi 26.9.1（插件由 `ya pkg` 管理）。Wayland 畫廊用 swayimg 5.6，影片縮圖用 ffmpegthumbnailer 2.3。 |
 | 圖形檔案管理器 | Dolphin 26.08.1（Qt 6.11 / KF6）。`kde` 包讓 Dolphin 處理 FileManager1 的 D-Bus 請求，並指定 kitty 為 KDE 終端。 |
 
 ### kitty 升級後檢查
 
 1. 在 kitty 按 `Ctrl+Shift+F6` 查看載入的設定，用 `Ctrl+Shift+Enter` 向右分割、`Ctrl+Shift+E` 向下分割。
 2. 在窗格內啟動受監視的 agent，確認分頁列顯示狀態。每個 kitty 程序的快照預設寫在 `~/.local/state/kitty-herd/current.<pid>.json`，狀態轉換記錄在同目錄下的 `transitions.jsonl`。設定了 `XDG_STATE_HOME` 時，以該目錄為準。
-3. 在 kitty 切換 Rime 中英文模式，確認分頁列徽章與游標顏色跟著改變。
+3. 切換 Rime 中英文模式，確認分頁列徽章與游標顏色隨之改變。kitty 讀取 `$XDG_RUNTIME_DIR/rime-mode`。新機需另行還原 Rime 使用者目錄的 `lua/codelllc09/mode_hint.lua`，並由輸入方案載入。缺少狀態檔時，徽章顯示 `·`。
 
 ### Neovim 使用指南
 
 在程式碼中選取文字，依次按 **空格、a、a** 即可帶著選區開啟 Codex 側欄，`Ctrl+s` 送出，`空格 at` 收起或展開。新機需備妥已登入的 Codex CLI 和 `codex-acp`。[Agentic 指南](nvim/.config/nvim/agentic.nvim.help.md)
 
-Markdown 用 render-markdown，Typst 用 Markview。Kitty 中的 Snacks 可行內顯示公式與 Mermaid 圖，分別需要對應的排版工具（`typst`、`pdflatex` 或 `tectonic`）及 `mmdc`。[Typst 測試文件](nvim/tests/typst-hybrid.typ) · [LaTeX 測試文件](nvim/tests/latex-hybrid.tex)
+Markdown 用 render-markdown，Typst 用 Markview。在 kitty 中，Snacks 可行內顯示公式與 Mermaid 圖。
+
+- **Typst 公式**用 `typst`。**LaTeX 公式**用 `pdflatex` 或 `tectonic`，新機還需另裝 `latex` Tree-sitter 解析器。兩者都需要 ImageMagick 和 Ghostscript 將 PDF 轉成圖片。[Typst 測試文件](nvim/tests/typst-hybrid.typ) · [LaTeX 測試文件](nvim/tests/latex-hybrid.tex)
+- **Mermaid 圖**用 `mmdc`。[Mermaid 測試文件](nvim/tests/mermaid-sizing.md)
 
 | 要做什麼 | 使用指南 |
 |---|---|
@@ -126,20 +131,18 @@ Markdown 用 render-markdown，Typst 用 Markview。Kitty 中的 Snacks 可行�
 
 Emacs 配置按主責拆分，每個套件只由一個模組擁有；套件下載、原生編譯、
 Tree-sitter grammar、工具虛擬環境及會話資料仍留在 `~/.emacs.d/`，不進倉庫。
-修改後可用以下命令驗證完整啟動：
+修改後可用以下命令確認 `init.el` 能載入。再於 Emacs 執行 `M-x lcw-doctor` 檢查套件、外部工具和 Ghostel 原生模組。
 
 ```bash
-emacs --batch -Q --load ~/.emacs.d/init.el --eval '(message "Emacs config OK")'
+emacs --batch -Q --load ~/.emacs.d/init.el --eval '(message "init.el loaded")'
 ```
 
 ### Yazi
 
-Yazi 看圖走兩條路：終端內快速預覽（T 最大化後 j/k 上下張、+/- 縮放，官方
-toggle-pane/zoom 插件）；GUI 式體驗按 <C-t> 開 swayimg 畫廊（PgDn/PgUp 翻頁、
-縮放保留、方向鍵/拖動平移、Enter 畫廊↔單圖、Esc 回 yazi）。swayimg 與
-ffmpegthumbnailer（視頻首幀）由 dnf 安裝，不入庫；插件本體在
-~/.config/yazi/plugins 由 ya pkg 下載，清單記於 package.toml，新機先裝 yazi
-再 `ya pkg install` 復原。
+新機安裝 Yazi、部署配置後，執行 `ya pkg install` 還原插件。Wayland 看圖另用 dnf 安裝 swayimg，影片縮圖需 ffmpegthumbnailer。[插件清單](yazi/.config/yazi/package.toml)
+
+- **終端預覽**按 `T` 最大化或還原預覽，`j`／`k` 換圖，`+`／`-` 縮放。
+- **Wayland 畫廊**按 `Ctrl+T` 開啟 swayimg，`Enter` 切換畫廊與單圖，`Esc` 回到 Yazi。單圖下用 `PgDn`／`PgUp` 換圖，方向鍵或拖曳平移。換圖時預設重新計算縮放。影片縮圖預設取自片長 10% 處。
 
 ### Bash
 
@@ -159,7 +162,7 @@ KConfig 會沿軟連結寫回 `kdeglobals` 和 `dolphinrc`。`Version` 與 `View
 
 ## 佈局
 
-每個設定包內的路徑都相對於家目錄。
+下列路徑按預設 XDG 目錄列出。`install.sh` 會依 `XDG_CONFIG_HOME` 和 `XDG_DATA_HOME` 調整 `.config/` 與 `.local/share/` 的部署位置。
 
 ```
 kitty/
@@ -192,7 +195,7 @@ emacs/
   .emacs.d/lisp/init-ui.el            → frame 視覺：modeline、Tab Bar、主題、字體與圖標
   .emacs.d/lisp/init-project.el       → project、Dired、Magit、會話恢復
   .emacs.d/lisp/init-dashboard.el     → 啟動螢幕（Restore 按鈕依賴 init-project 的會話恢復）
-  .emacs.d/lisp/init-terminal.el      → 專案終端面板（Vterm，C-x w t）與 ansi-color
+  .emacs.d/lisp/init-terminal.el      → 專案終端面板（Ghostel，C-x w t）與 ansi-color
   .emacs.d/lisp/init-programming.el   → Tree-sitter、Eglot、格式化、測試與除錯
   .emacs.d/snippets/                  → 個人 YASnippet 模板
   .emacs.d/tools/                     → Node/Python 工具的可重建版本清單
@@ -201,12 +204,12 @@ nvim/
   .config/nvim/init.lua               → 編輯、文檔預覽、Git 與 Codex 側欄配置
   .config/nvim/nvim-pack-lock.json    → vim.pack 鎖定的 10 個插件版本
   .config/nvim/*.help.md              → 各插件的本機快捷鍵與使用指南
-  tests/                              → Typst 與 LaTeX 混合預覽測試文件
+  tests/                              → Typst、LaTeX 與 Mermaid 預覽測試文件
 
 yazi/
   .config/yazi/keymap.toml            → 增量鍵位：<C-t> 開 swayimg 縮略圖畫廊、T 預覽最大化、+/- 預覽縮放
   .config/yazi/yazi.toml              → 預覽尺寸上限 2000×2000（zoom 插件放大不被截斷）
-  .config/yazi/package.toml           → ya pkg 插件清單（toggle-pane/zoom/thumbnail），新機 ya pkg install 復原
+  .config/yazi/package.toml           → ya pkg 管理的 9 個插件及鎖定版本
 
 niri/
   .config/niri/config.kdl             → Niri 快捷鍵、視窗規則與啟動項
@@ -220,7 +223,7 @@ noctalia/
 
 vicinae/
   .config/vicinae/dotfiles.json       → 我們的基礎配置（遙測關/緊湊模式/無時鐘），經 settings.json 的 imports 引入
-  .local/share/vicinae/scripts/       → 腳本命令：\gh/\bili/\tr 網搜（反斜杠前綴避免搶排名）（@vicinae.* 註解式，percentEncoded）
+  .local/share/vicinae/scripts/       → \gh 搜 GitHub、\bili 搜 Bilibili、\tr 翻譯、\cheat 或 \cht 查命令速查表
 
 gnome/
   .config/gnome-extensions/astra-monitor.dconf → Astra Monitor 的 dconf 非默認鍵快照（dconf dump 產物，改設置後需重新 dump）
@@ -236,7 +239,7 @@ kde/
 ## 日常
 
 - 直接修改已連結的設定檔，再用 `git -C ~/dotfiles status` 查看改動。
-- 新增工具時，依家目錄的相對路徑建立設定包，從倉庫根目錄用 Stow 連結該包。
+- 新增工具時，依家目錄的相對路徑建立設定包。要隨 `install.sh` 部署，將檔案加入 Git，並把包名加入腳本對應的共用或桌面包清單。
 - 提交用 `cd ~/dotfiles && git add -A && git commit`。
 
 ## 原則
